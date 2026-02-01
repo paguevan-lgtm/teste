@@ -1,0 +1,415 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Bora de Van - Gestão 🚐</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- HTML2Canvas (Para Prints) -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+    <!-- Firebase Compat Scripts (Global Namespace) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        html, body {
+            margin: 0; padding: 0;
+            width: 100vw; height: 100dvh;
+            background-color: #0f172a; color: #e2e8f0;
+            font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif; /* Updated Font */
+            position: fixed; inset: 0; overflow: hidden;
+        }
+
+        #root { width: 100%; height: 100%; display: flex; flex-direction: column; }
+
+        /* Loader */
+        #loader { position: fixed; inset: 0; z-index: 9999; background: #0f172a; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #334155; border-top: 4px solid #f59e0b; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* --- PREMIUM ANIMATIONS & EASING --- */
+        :root {
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
+            --ease-elastic: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* 1. Page Transitions */
+        @keyframes pageEnter {
+            from { opacity: 0; transform: translateY(15px) scale(0.98); filter: blur(4px); }
+            to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+        }
+        .page-transition { animation: pageEnter 0.6s var(--ease-out-expo) forwards; will-change: transform, opacity, filter; }
+
+        /* 2. Staggered Entrance (Cascata) */
+        @keyframes slideUpFade {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .stagger-in { opacity: 0; animation: slideUpFade 0.7s var(--ease-out-expo) forwards; }
+        .d-1 { animation-delay: 50ms; }
+        .d-2 { animation-delay: 100ms; }
+        .d-3 { animation-delay: 150ms; }
+        .d-4 { animation-delay: 200ms; }
+        .d-5 { animation-delay: 250ms; }
+
+        /* 3. Card & Button Interaction */
+        .premium-card {
+            transition: transform 0.4s var(--ease-out-expo), box-shadow 0.4s var(--ease-out-expo), border-color 0.3s;
+        }
+        .premium-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 15px 30px -10px rgba(0,0,0,0.5);
+            border-color: rgba(255,255,255,0.2);
+        }
+        .premium-click:active { transform: scale(0.96); }
+
+        /* 4. Login Intro Animation */
+        .intro-layer {
+            position: fixed; inset: 0; z-index: 9998;
+            background: #d97706; /* Amber-600 */
+            clip-path: circle(0% at 50% 100%);
+            pointer-events: none;
+            transition: clip-path 0.8s var(--ease-in-out-circ);
+        }
+        .intro-layer.active { clip-path: circle(150% at 50% 100%); }
+        
+        .logo-bounce { animation: bounceLogo 1s var(--ease-elastic) infinite; }
+        @keyframes bounceLogo { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+
+        /* --- TOUR STYLES --- */
+        .tour-overlay {
+            position: fixed; inset: 0; z-index: 10000;
+            background: transparent; /* Alterado para transparente, o spotlight faz o escurecimento */
+            pointer-events: none; /* Deixa clicar no elemento destacado se precisar */
+            transition: all 0.5s ease;
+        }
+        
+        /* O Spotlight agora usa position FIXED para garantir coordenadas visuais corretas */
+        .tour-spotlight {
+            position: fixed; 
+            border-radius: 12px;
+            /* Sombra gigante para escurecer o resto da tela */
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.75), 0 0 30px rgba(245, 158, 11, 0.5); 
+            border: 2px solid #f59e0b;
+            transition: all 0.4s var(--ease-out-expo);
+            pointer-events: none;
+            z-index: 10001;
+        }
+        .tour-tooltip {
+            position: fixed; /* Tooltip também fixed para acompanhar o spotlight */
+            z-index: 10002;
+            width: 320px;
+            max-width: 85vw;
+            pointer-events: auto;
+            transition: all 0.4s var(--ease-out-expo);
+        }
+        .tour-arrow { position: absolute; width: 16px; height: 16px; background: #1e293b; transform: rotate(45deg); z-index: -1; }
+
+        /* AI Animations */
+        .bg-ai { background: linear-gradient(135deg, #f59e0b, #d97706, #b45309); background-size: 200% 200%; animation: ai-pulse 3s ease infinite; }
+        @keyframes ai-pulse { 0% {background-position: 0% 50%} 50% {background-position: 100% 50%} 100% {background-position: 0% 50%} }
+
+        .listening { 
+            background-color: #ef4444 !important; 
+            color: white !important; 
+            border-color: #ef4444 !important; 
+            animation: pulse-mic 1.5s infinite;
+        }
+        @keyframes pulse-mic { 
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); transform: scale(1); } 
+            70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); transform: scale(1.05); } 
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); transform: scale(1); } 
+        }
+
+        /* Drag & Drop Styles */
+        .draggable-item { cursor: grab; touch-action: pan-y; user-select: none; -webkit-touch-callout: none; transition: transform 0.2s, box-shadow 0.2s; }
+        .draggable-item:active { cursor: grabbing; z-index: 50; transform: scale(1.02); }
+        .dragging { opacity: 0.5; border: 2px dashed #f59e0b; }
+        .drag-over { border-top: 2px solid #f59e0b; }
+
+        input, select, textarea { font-size: 16px !important; }
+        .scroll-y { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .scroll-y::-webkit-scrollbar { width: 4px; }
+        .scroll-y::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        
+        .anim-fade { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .expand-content { transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out; overflow: hidden; }
+        
+        .login-bg { background: radial-gradient(circle at center, #1e293b 0%, #020617 100%); overflow: hidden; position: relative; }
+        
+        .show-on-print { display: none; } 
+
+        /* --- MODERN AUTOMOTIVE VAN (FIXED MIRRORS) --- */
+        .road-container {
+            position: absolute; inset: 0; overflow: hidden; z-index: 0;
+            perspective: 800px;
+            background: linear-gradient(to bottom, #020617 40%, #0f172a 100%);
+        }
+        .road-grid {
+            position: absolute; top: 50%; left: -50%; width: 200%; height: 100%;
+            background: linear-gradient(transparent 50%, rgba(245, 158, 11, 0.05) 50%), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+            background-size: 100% 40px, 80px 100%;
+            transform: rotateX(80deg); transform-origin: top center;
+            animation: gridMove 0.8s linear infinite;
+        }
+        @keyframes gridMove { from { background-position: 0 0; } to { background-position: 0 40px; } }
+
+        /* Wrapper Container */
+        .van-wrapper {
+            position: relative; width: 260px; height: 160px;
+            display: flex; justify-content: center; align-items: flex-end;
+            margin-bottom: 25px; z-index: 10;
+            transform-style: preserve-3d;
+            transition: transform 0.4s var(--ease-elastic);
+        }
+        .van-wrapper.engine-on { animation: engineRumble 0.1s infinite alternate; }
+        @keyframes engineRumble { from { transform: translateY(0); } to { transform: translateY(1px); } }
+
+        /* The Main Body Shape */
+        .van-body {
+            position: relative; width: 220px; height: 140px;
+            background: linear-gradient(170deg, #334155 0%, #1e293b 40%, #020617 100%);
+            border-radius: 40px 40px 15px 15px; /* Smoother top corners */
+            box-shadow: 
+                inset 0 1px 1px rgba(255,255,255,0.3), /* Top Highlight */
+                0 25px 30px rgba(0,0,0,0.6); /* Drop Shadow */
+            z-index: 2;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        /* Roof Area */
+        .roof {
+            width: 180px; height: 15px;
+            background: #1e293b;
+            border-radius: 20px 20px 0 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            margin-top: -5px; /* Pop up slightly */
+            position: relative; z-index: 1;
+        }
+        /* Roof Marker Lights */
+        .marker-lights {
+            display: flex; gap: 20px; position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+        }
+        .marker-light {
+            width: 8px; height: 4px; background: #d97706; border-radius: 2px; opacity: 0.6;
+            box-shadow: 0 0 5px #d97706;
+        }
+
+        /* Windshield - Glossy */
+        .windshield {
+            width: 190px; height: 55px;
+            background: linear-gradient(180deg, #0f172a 0%, #1e293b 60%, #334155 100%);
+            border-radius: 12px 12px 6px 6px;
+            margin-top: 5px;
+            position: relative; overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.05);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+        }
+        .windshield::after { /* Reflection */
+            content: ''; position: absolute; top: -20px; right: -20px; width: 100px; height: 150px;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
+            transform: rotate(30deg);
+        }
+
+        /* Mirrors - ATTACHED! */
+        .mirror-assembly {
+            position: absolute; top: 45px;
+            display: flex; align-items: flex-start;
+            z-index: 0; /* Behind the A-pillar curve visually */
+        }
+        .mirror-assembly.left { left: -28px; }
+        .mirror-assembly.right { right: -28px; flex-direction: row-reverse; }
+
+        .mirror-arm {
+            width: 25px; height: 12px;
+            background: #1e293b;
+            margin-top: 10px; /* Align with pillar */
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .mirror-assembly.left .mirror-arm { transform: skewY(-15deg); border-radius: 5px 0 0 5px; margin-right: -5px; }
+        .mirror-assembly.right .mirror-arm { transform: skewY(15deg); border-radius: 0 5px 5px 0; margin-left: -5px; }
+
+        .mirror-housing {
+            width: 20px; height: 35px;
+            background: linear-gradient(to bottom, #334155, #0f172a);
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 5px 10px rgba(0,0,0,0.5);
+        }
+        /* Turn signal on mirror */
+        .mirror-signal {
+            width: 100%; height: 2px; background: rgba(255,255,255,0.2); margin-top: 15px;
+        }
+
+        /* Front Facade */
+        .front-fascia {
+            width: 100%; flex-grow: 1;
+            display: flex; flex-direction: column; align-items: center;
+            position: relative;
+            padding-top: 10px;
+        }
+
+        /* Grille & Lights Container */
+        .grille-unit {
+            display: flex; align-items: center; justify-content: center;
+            width: 210px; height: 45px;
+            position: relative;
+        }
+
+        .main-grille {
+            width: 90px; height: 100%;
+            background: 
+                repeating-linear-gradient(0deg, #020617, #020617 3px, #1e293b 4px),
+                linear-gradient(to bottom, #1e293b, #000);
+            border: 2px solid #334155;
+            border-radius: 4px 4px 12px 12px;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 5;
+        }
+        .logo-badge {
+            width: 26px; height: 26px; border-radius: 50%;
+            background: #0f172a; border: 2px solid #cbd5e1;
+            box-shadow: 0 0 5px rgba(255,255,255,0.2);
+            position: relative;
+        }
+        .logo-badge::before, .logo-badge::after {
+            content: ''; position: absolute; background: #cbd5e1; top: 50%; left: 50%;
+        }
+        .logo-badge::before { width: 14px; height: 2px; transform: translate(-50%, -50%); }
+        .logo-badge::after { width: 2px; height: 14px; transform: translate(-50%, -50%); }
+
+        /* Headlights */
+        .headlight-unit {
+            width: 55px; height: 28px;
+            background: #000;
+            border: 1px solid #475569;
+            display: flex; align-items: center; justify-content: center;
+            position: relative;
+        }
+        .headlight-unit.left { 
+            border-radius: 4px 0 0 4px; margin-right: -2px; transform: skewX(10deg); 
+            background: linear-gradient(90deg, #000, #1e293b);
+        }
+        .headlight-unit.right { 
+            border-radius: 0 4px 4px 0; margin-left: -2px; transform: skewX(-10deg);
+            background: linear-gradient(-90deg, #000, #1e293b);
+        }
+
+        /* LED Strip DRL */
+        .drl-strip {
+            position: absolute; top: 2px; width: 90%; height: 2px;
+            background: #94a3b8; opacity: 0.5;
+            box-shadow: 0 0 2px rgba(255,255,255,0.5);
+            transition: all 0.3s ease;
+        }
+
+        /* Projector Lens */
+        .projector-lens {
+            width: 14px; height: 14px;
+            background: #111; border-radius: 50%;
+            border: 1px solid #333;
+            box-shadow: inset 0 0 5px #000;
+            position: relative; margin-top: 4px;
+            transition: all 0.3s ease;
+        }
+        .projector-lens::after {
+            content: ''; position: absolute; inset: 20%; background: #fff; border-radius: 50%;
+            opacity: 0.1; transition: opacity 0.3s;
+        }
+
+        /* Bumper */
+        .bumper {
+            width: 210px; height: 25px;
+            background: #1e293b;
+            border-radius: 4px 4px 10px 10px;
+            margin-top: 5px;
+            display: flex; justify-content: space-between; align-items: center; padding: 0 20px;
+            box-shadow: inset 0 -2px 5px rgba(0,0,0,0.5);
+        }
+        .fog-light {
+            width: 15px; height: 8px; background: #334155; border-radius: 2px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .plate-box {
+            width: 60px; height: 14px; background: #f8fafc; border-radius: 2px;
+            font-size: 8px; font-weight: 900; color: #000; display: flex; items-center; justify-content: center;
+            border: 1px solid #94a3b8;
+        }
+
+        /* Light Beams */
+        .beam-cone {
+            position: absolute; top: 100%; width: 250px; height: 0;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.5) 0%, transparent 100%);
+            transform-origin: top center;
+            opacity: 0; pointer-events: none; z-index: 20;
+            filter: blur(8px); mix-blend-mode: screen;
+            transition: all 0.4s ease-out;
+        }
+        .beam-cone.left { left: -100px; transform: rotate(18deg); clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%); }
+        .beam-cone.right { right: -100px; transform: rotate(-18deg); clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%); }
+
+        /* --- INTERACTIONS --- */
+
+        /* Focus User (Ignition/High Beams) */
+        .van-wrapper.focus-user .drl-strip { background: #fff; box-shadow: 0 0 8px #fff; opacity: 1; }
+        .van-wrapper.focus-user .projector-lens { background: #fff; box-shadow: 0 0 20px #fff; border-color: #fff; }
+        .van-wrapper.focus-user .projector-lens::after { opacity: 1; }
+        .van-wrapper.focus-user .beam-cone { height: 600px; opacity: 0.8; }
+
+        /* Focus Password (Low Beams/Amber) */
+        .van-wrapper.focus-pass .drl-strip { background: #fbbf24; box-shadow: 0 0 5px #fbbf24; opacity: 1; }
+        .van-wrapper.focus-pass .projector-lens { background: #fbbf24; box-shadow: 0 0 10px #f59e0b; }
+        .van-wrapper.focus-pass .beam-cone { height: 250px; opacity: 0.5; width: 100px; background: linear-gradient(to bottom, rgba(251, 191, 36, 0.4) 0%, transparent 100%); }
+        .van-wrapper.focus-pass .beam-cone.left { left: -30px; transform: rotate(5deg); }
+        .van-wrapper.focus-pass .beam-cone.right { right: -30px; transform: rotate(-5deg); }
+
+        /* Zoom / Launch Animation */
+        .login-bg.zooming .van-wrapper { animation: launchVan 0.8s cubic-bezier(0.6, 0, 0.2, 1) forwards; }
+        .login-bg.zooming .projector-lens { background: #fff !important; box-shadow: 0 0 80px #fff !important; transform: scale(1.5); }
+        .login-bg.zooming .beam-cone { height: 1200px !important; opacity: 1 !important; width: 800px !important; background: #fff !important; }
+        
+        @keyframes launchVan {
+            0% { transform: scale(1) translateY(0); }
+            40% { transform: scale(0.95) translateY(10px); } /* Squat before launch */
+            100% { transform: scale(8) translateY(400px); opacity: 0; } /* Zoom past camera */
+        }
+
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.39.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="loader"><div class="spinner"></div><p style="margin-top:20px; color:#94a3b8; font-size:12px; font-weight:bold;">Bora de Van 🚐</p></div>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+    <script>setTimeout(()=>{const l=document.getElementById('loader');if(l)l.remove()},4000);</script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
