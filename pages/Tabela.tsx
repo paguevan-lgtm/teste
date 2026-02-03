@@ -1,11 +1,26 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Icons, Button, IconButton } from '../components/Shared';
 import { handlePrint, formatDisplayDate, dateAddDays } from '../utils';
 
-export default function Tabela({ data, theme, tableTab, setTableTab, currentOpDate, getTodayDate, analysisDate, setAnalysisDate, analysisRotatedList, tableStatus, editName, tempName, setEditName, setTempName, saveDriverName, updateTableStatus, currentRotatedList, confirmedTimes, isTimeExpired, lousaOrder, sendToLousaKeepConfirmed, handleLousaAction, startLousaTime, draggedItem, handleDragStart, handleDrop, handleTouchStart, handleTouchMove, handleTouchEnd, addMadrugadaVaga, madrugadaList, handleMadrugadaDragStart, handleMadrugadaDrop, removeMadrugadaVaga, toggleMadrugadaRiscado, spList, madrugadaData, openMadrugadaTrip, cannedMessages, addCannedMessage, updateCannedMessage, deleteCannedMessage, handleCannedDragStart, handleCannedDrop, handleGeneralDragStart, handleGeneralDrop, addNullLousaItem, notify, madrugadaOrderedList }: any) {
+export default function Tabela({ data, theme, tableTab, setTableTab, currentOpDate, getTodayDate, analysisDate, setAnalysisDate, analysisRotatedList, tableStatus, editName, tempName, setEditName, setTempName, saveDriverName, updateTableStatus, currentRotatedList, confirmedTimes, isTimeExpired, lousaOrder, sendToLousaKeepConfirmed, handleLousaAction, startLousaTime, draggedItem, handleDragStart, handleDrop, handleTouchStart, handleTouchMove, handleTouchEnd, addMadrugadaVaga, madrugadaList, handleMadrugadaDragStart, handleMadrugadaDrop, removeMadrugadaVaga, toggleMadrugadaRiscado, spList, madrugadaData, openMadrugadaTrip, cannedMessages, addCannedMessage, updateCannedMessage, deleteCannedMessage, handleCannedDragStart, handleCannedDrop, handleGeneralDragStart, handleGeneralDrop, addNullLousaItem, notify, getRotatedList, getRotatedMadrugadaList }: any) {
 
     let lousaEffectiveIndex = 0;
+
+    // Lógica para determinar qual data de Madrugada mostrar INICIALMENTE
+    const isLateDay = new Date().getHours() >= 14;
+    const initialMadrugadaDate = (currentOpDate === getTodayDate() && isLateDay) 
+        ? dateAddDays(currentOpDate, 1) 
+        : currentOpDate;
+
+    // Estado local para navegação da data da madrugada
+    const [madrugadaDisplayDate, setMadrugadaDisplayDate] = useState(initialMadrugadaDate);
+
+    // Usa a nova função getRotatedMadrugadaList para calcular a rotação exclusiva da madrugada
+    // Se não existir (por algum motivo legado), cai no fallback antigo
+    const madrugadaOrderedList = getRotatedMadrugadaList 
+        ? getRotatedMadrugadaList(madrugadaDisplayDate) 
+        : (getRotatedList ? getRotatedList(madrugadaDisplayDate).filter((d:any) => madrugadaList.includes(d.vaga)) : []);
 
     // Função auxiliar para filtrar confirmados com segurança
     const getConfirmados = () => {
@@ -22,13 +37,6 @@ export default function Tabela({ data, theme, tableTab, setTableTab, currentOpDa
             notify(error.message, 'error');
         }
     };
-
-    // Lógica para determinar qual data de Madrugada mostrar
-    // Se o dia operacional for hoje e já passar das 14h, provavelmente queremos planejar a madrugada de AMANHÃ.
-    const isLateDay = new Date().getHours() >= 14;
-    const madrugadaTargetDate = (currentOpDate === getTodayDate() && isLateDay) 
-        ? dateAddDays(currentOpDate, 1) 
-        : currentOpDate;
 
     return (
         <div 
@@ -264,30 +272,39 @@ export default function Tabela({ data, theme, tableTab, setTableTab, currentOpDa
             {tableTab === 'madrugada' && (
                 <div className={`${theme.card} p-3 md:p-5 rounded-xl border ${theme.border} anim-fade overflow-hidden`}>
                     <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3 md:gap-0">
-                        <h3 className="text-lg font-bold flex items-center gap-2"><Icons.Moon size={20}/> Madrugada ({formatDisplayDate(madrugadaTargetDate)})</h3>
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-bold flex items-center gap-2"><Icons.Moon size={20}/> Madrugada</h3>
+                            <div className="flex items-center gap-1 bg-black/30 p-1 rounded-lg ml-2">
+                                <button onClick={() => setMadrugadaDisplayDate(dateAddDays(madrugadaDisplayDate, -1))} className="p-1.5 hover:bg-white/10 rounded-md"><Icons.ChevronLeft size={16}/></button>
+                                <div className="px-2 font-mono font-bold text-xs">{formatDisplayDate(madrugadaDisplayDate)}</div>
+                                <button onClick={() => setMadrugadaDisplayDate(dateAddDays(madrugadaDisplayDate, 1))} className="p-1.5 hover:bg-white/10 rounded-md"><Icons.ChevronRight size={16}/></button>
+                                <button onClick={() => setMadrugadaDisplayDate(initialMadrugadaDate)} className="ml-1 text-[10px] bg-white/10 px-2 py-1 rounded hover:bg-white/20">Hoje</button>
+                            </div>
+                        </div>
                         <div className="flex flex-wrap gap-2 items-center justify-between md:justify-end w-full md:w-auto">
                             <Button theme={theme} onClick={addMadrugadaVaga} icon={Icons.Plus} size="sm" variant="success">Adicionar Motorista</Button>
                             
                             <div className="flex items-center gap-2">
-                                <button onClick={() => onPrint('print-madrugada-list', 'Madrugada', 'MADRUGADA', { mode: 'madrugada', date: madrugadaTargetDate })} className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-colors" title="Salvar como Imagem"><Icons.Print size={18}/></button>
+                                <button onClick={() => onPrint('print-madrugada-list', 'Madrugada', 'MADRUGADA', { mode: 'madrugada', date: madrugadaDisplayDate })} className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-colors" title="Salvar como Imagem"><Icons.Print size={18}/></button>
                             </div>
                         </div>
                     </div>
-                    <p className="text-xs opacity-50 mb-3 hide-on-print">Planejamento para a madrugada de {isLateDay ? 'Amanhã' : 'Hoje'}.</p>
+                    <p className="text-xs opacity-50 mb-3 hide-on-print">Planejamento para a madrugada do dia {formatDisplayDate(madrugadaDisplayDate)}.</p>
                     <div id="print-madrugada-list" className="space-y-2">
-                        {/* USANDO LISTA ORDENADA AUTOMATICAMENTE */}
+                        {/* USANDO LISTA ORDENADA AUTOMATICAMENTE COM BASE NA DATA SELECIONADA */}
                         {madrugadaOrderedList && madrugadaOrderedList.length > 0 ? madrugadaOrderedList.map((driver:any, index:number) => { 
                             const vaga = driver.vaga;
                             const mData = madrugadaData[vaga] || { qtd: '', time: '', riscado: false, comment: '' }; 
                             const isDraggingThis = draggedItem?.index === index && draggedItem?.listType === 'madrugada'; 
                             
-                            const tripId = `mad_${madrugadaTargetDate}_${vaga}`;
-                            const trip = data.trips.find((t:any) => t.id === tripId || (t.isMadrugada && t.vaga === vaga && t.date === madrugadaTargetDate && t.status !== 'Cancelada'));
+                            // Busca viagem específica para a data selecionada
+                            const tripId = `mad_${madrugadaDisplayDate}_${vaga}`;
+                            const trip = data.trips.find((t:any) => t.id === tripId || (t.isMadrugada && t.vaga === vaga && t.date === madrugadaDisplayDate && t.status !== 'Cancelada'));
                             const isCancelled = trip && trip.status === 'Cancelada';
                             const isFinished = trip && trip.status === 'Finalizada';
                             
-                            const displayTime = trip ? trip.time : (madrugadaTargetDate === currentOpDate ? mData.time : '');
-                            const displayQtd = trip ? (trip.pCountSnapshot || trip.pCount) : (madrugadaTargetDate === currentOpDate ? mData.qtd : '');
+                            const displayTime = trip ? trip.time : (madrugadaDisplayDate === currentOpDate ? mData.time : '');
+                            const displayQtd = trip ? (trip.pCountSnapshot || trip.pCount) : (madrugadaDisplayDate === currentOpDate ? mData.qtd : '');
 
                             let rowClass = `flex flex-col md:flex-row items-center gap-2 p-3 rounded-lg border draggable-item cursor-grab active:cursor-grabbing`;
                             if (isCancelled) rowClass += ` bg-red-900/10 border-red-500/30 opacity-70`;
@@ -321,7 +338,7 @@ export default function Tabela({ data, theme, tableTab, setTableTab, currentOpDa
                                                 </div>
                                                 
                                                 <button 
-                                                    onClick={() => openMadrugadaTrip(vaga)}
+                                                    onClick={() => openMadrugadaTrip(vaga, madrugadaDisplayDate)}
                                                     className="p-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/40 rounded-lg transition-colors font-bold text-xs flex items-center gap-1"
                                                     title="Editar Viagem"
                                                 >
@@ -336,7 +353,7 @@ export default function Tabela({ data, theme, tableTab, setTableTab, currentOpDa
                                     )} 
                                 </div> 
                             ); 
-                        }) : <div className="text-center opacity-30 text-sm py-4">Nenhuma vaga na madrugada hoje.</div>} 
+                        }) : <div className="text-center opacity-30 text-sm py-4">Nenhuma vaga na madrugada para esta data.</div>} 
                     </div>
                 </div>
             )}

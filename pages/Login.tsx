@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Input, Toast, Icons } from '../components/Shared';
 import { useAuth } from '../contexts/AuthContext';
 import { USERS_DB } from '../constants'; 
+import { db } from '../firebase'; // Import DB para verificação
 
 export const LoginScreen = () => {
     const { login } = useAuth(); 
@@ -40,11 +41,37 @@ export const LoginScreen = () => {
         setIsTyping(true);
     };
 
-    // 1. Primeiro passo: Validar credenciais e Checar Permissão
+    // 1. Primeiro passo: Validar credenciais (Local + DB) e Checar Permissão
     const handlePreLogin = async () => {
         if(!username || !password) return notify("Preencha usuário e senha", "error");
         
-        const userExists = USERS_DB[username] && USERS_DB[username].pass === password;
+        setLoading(true);
+        let userExists = false;
+
+        // A. Verificação Local (Constants)
+        if (USERS_DB[username] && USERS_DB[username].pass === password) {
+            userExists = true;
+        }
+
+        // B. Verificação no Banco de Dados (Firebase)
+        if (!userExists && db) {
+            try {
+                const snapshot = await db.ref('users').once('value');
+                const users = snapshot.val();
+                if (users) {
+                    // Busca case-insensitive para username, exata para senha
+                    const found = Object.values(users).some((u:any) => 
+                        u.username && u.username.toLowerCase() === username.toLowerCase() && 
+                        u.pass === password
+                    );
+                    if (found) userExists = true;
+                }
+            } catch (error) {
+                console.error("Erro ao verificar usuário no DB:", error);
+            }
+        }
+
+        setLoading(false);
 
         if (!userExists) {
             notify('Acesso negado. Verifique suas credenciais.', 'error');
@@ -221,7 +248,7 @@ export const LoginScreen = () => {
                     disabled={loading}
                     className="w-full bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-500 hover:to-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black italic uppercase tracking-wider py-3.5 rounded-lg shadow-lg hover:shadow-orange-500/20 transition-all flex items-center justify-center gap-2 transform hover:scale-[1.02] active:scale-[0.98] mt-2"
                 >
-                    Validar Acesso
+                    {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : 'Validar Acesso'}
                 </button>
             </div>
             

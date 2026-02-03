@@ -5,7 +5,7 @@ import { THEMES } from '../constants';
 import { getAvatarUrl, generateUniqueId, getTodayDate } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 
-export default function Configuracoes({ user, theme, restartTour, setAiModal, geminiKey, setGeminiKey, saveApiKey, ipToBlock, setIpToBlock, blockIp, data, del, ipHistory, ipLabels, saveIpLabel, changeTheme, themeKey, dbOp, notify, requestConfirm }: any) {
+export default function Configuracoes({ user, theme, restartTour, setAiModal, geminiKey, setGeminiKey, saveApiKey, ipToBlock, setIpToBlock, blockIp, data, del, ipHistory, ipLabels, saveIpLabel, changeTheme, themeKey, dbOp, notify, requestConfirm, setView }: any) {
     const { logout } = useAuth();
     
     // States for Newsletter
@@ -39,7 +39,33 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
 
     return (
         <div className="space-y-6">
-            <div className={`${theme.card} p-6 ${theme.radius} border ${theme.border} flex items-center gap-4 stagger-in d-1 premium-card`}> <div className="w-16 h-16 rounded-full bg-slate-700 overflow-hidden border-2 border-white/20"> <img src={getAvatarUrl(user.username)} alt="User" className="w-full h-full" /> </div> <div> <h3 className="text-xl font-bold">{user.username}</h3> <p className="opacity-60 text-sm capitalize">{user.role}</p> <button onClick={handleLogoutClick} className="mt-2 text-xs bg-red-500/20 text-red-400 px-3 py-1 rounded-lg border border-red-500/30 flex items-center gap-1"><Icons.LogOut size={12}/> Sair da Conta</button> </div> </div>
+            <div className={`${theme.card} p-6 ${theme.radius} border ${theme.border} flex flex-col md:flex-row md:items-center justify-between gap-6 stagger-in d-1 premium-card`}> 
+                <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-full bg-slate-700 overflow-hidden border-2 border-white/20"> 
+                        <img src={getAvatarUrl(user.username)} alt="User" className="w-full h-full" /> 
+                    </div> 
+                    <div> 
+                        <h3 className="text-xl font-bold">{user.username}</h3> 
+                        <p className="opacity-60 text-sm capitalize">{user.role}</p> 
+                    </div> 
+                </div>
+                
+                <div className="flex flex-wrap gap-3">
+                    {/* BOTÃO GERENCIAR USUÁRIOS (Admin Only) */}
+                    {user.role === 'admin' && (
+                        <button 
+                            onClick={() => setView('manageUsers')}
+                            className="bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 px-4 py-2 rounded-xl flex items-center gap-2 font-bold transition-all active:scale-95"
+                        >
+                            <Icons.Users size={18}/> Gerenciar Usuários
+                        </button>
+                    )}
+
+                    <button onClick={handleLogoutClick} className="bg-red-500/20 text-red-400 hover:bg-red-500/30 px-4 py-2 rounded-xl border border-red-500/30 flex items-center gap-2 font-bold transition-all active:scale-95">
+                        <Icons.LogOut size={18}/> Sair
+                    </button>
+                </div>
+            </div>
             
             {/* Seção Newsletter */}
             <div className={`${theme.card} p-5 ${theme.radius} border ${theme.border} stagger-in d-2 premium-card`}>
