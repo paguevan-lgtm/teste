@@ -313,7 +313,8 @@ const AppContent = () => {
     }, [currentOpDate, lousaDate, analysisDate]);
 
     useEffect(() => {
-        if(!db || !user || !isFireConnected) return; 
+        // CORREÇÃO: Removemos isFireConnected para permitir leitura se o DB for publico ou auth estiver lento
+        if(!db || !user) return; 
         
         const msgRef = db.ref('canned_messages_config/list');
         const msgCb = msgRef.on('value', (snap: any) => {
@@ -412,10 +413,11 @@ const AppContent = () => {
             labelsRef.off('value', labelsCb);
             savedMenuRef.off('value', savedMenuCb);
         }
-    }, [db, user, isFireConnected, currentOpDate, lousaDate]);
+    }, [db, user, isFireConnected, currentOpDate, lousaDate]); // mantem isFireConnected para trigger, mas remove do if
 
     useEffect(() => {
-        if (!db || !user || !isFireConnected) return;
+        // CORREÇÃO: Removemos isFireConnected do check
+        if (!db || !user) return;
         const nodes = ['passengers', 'drivers', 'trips', 'notes', 'lostFound', 'blocked_ips', 'newsletter'];
         const unsubs = nodes.map(node => {
             const ref = db.ref(node);
@@ -430,7 +432,7 @@ const AppContent = () => {
             return () => ref.off('value', callback);
         });
         return () => unsubs.forEach(fn => fn());
-    }, [user, isFireConnected]); 
+    }, [user, isFireConnected]); // Trigger se conectar
 
     // --- FUNÇÕES ---
 
