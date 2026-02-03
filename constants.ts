@@ -60,7 +60,6 @@ export const THEMES: Record<string, Theme> = {
 };
 
 export const USERS_DB: Record<string, {pass: string, role: string}> = {
-    'Admin': { pass: 'Admin', role: 'admin' },
-    'Operador': { pass: 'Operador', role: 'operador' },
-    'Breno': { pass: '15744751', role: 'admin' }
+
+
 };

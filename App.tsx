@@ -1,4 +1,6 @@
 
+// ... existing imports ...
+// (Retaining imports as they are in the file provided by the user)
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db, auth } from './firebase';
 import { THEMES, INITIAL_SP_LIST, BAIRROS } from './constants';
@@ -24,6 +26,7 @@ import Tabela from './pages/Tabela';
 import Financeiro from './pages/Financeiro';
 import Achados from './pages/Achados';
 import Configuracoes from './pages/Configuracoes';
+import GerenciarUsuarios from './pages/GerenciarUsuarios';
 
 // Componente Interno que consome o Contexto
 const AppContent = () => {
@@ -33,7 +36,7 @@ const AppContent = () => {
     const [isFireConnected, setIsFireConnected] = useState(false);
     const [view, setView] = useState('dashboard');
     const [menuOpen, setMenuOpen] = useState(false);
-    const [data, setData] = useState<any>({ passengers: [], drivers: [], trips: [], notes: [], lostFound: [], blocked_ips: [], newsletter: [] });
+    const [data, setData] = useState<any>({ passengers: [], drivers: [], trips: [], notes: [], lostFound: [], blocked_ips: [], newsletter: [], users: [] });
     const [currentIp, setCurrentIp] = useState(''); 
     
     // Estados Específicos
@@ -149,7 +152,7 @@ const AppContent = () => {
     const getNextId = (col: string) => { 
         const list = data[col] || []; 
         if (list.length === 0) return "1"; 
-        if (col === 'notes' || col === 'lostFound' || col === 'blocked_ips' || col === 'newsletter') return Date.now().toString(); 
+        if (col === 'notes' || col === 'lostFound' || col === 'blocked_ips' || col === 'newsletter' || col === 'users') return Date.now().toString(); 
         
         const max = list.reduce((acc:number, item:any) => {
             const idNum = parseInt(item.id);
@@ -178,7 +181,7 @@ const AppContent = () => {
 
             if (type === 'create') {
                 const nextId = (node === 'passengers' || node === 'drivers' || node === 'trips') ? getNextId(node) : (payload.id || Date.now().toString());
-                const finalId = payload.id && (node === 'trips' || node === 'newsletter') ? payload.id : nextId;
+                const finalId = payload.id && (node === 'trips' || node === 'newsletter' || node === 'users') ? payload.id : nextId;
                 await ref.child(finalId).set({ ...payload, id: finalId, createdAt: new Date().toISOString() });
                 if (node !== 'notes') notify("Salvo com sucesso!", "success");
             } else if (type === 'update') {
@@ -257,7 +260,14 @@ const AppContent = () => {
                 setIsFireConnected(!!u);
             });
             if (isAuthenticated && !auth.currentUser) {
-                auth.signInAnonymously().catch((e:any) => console.error("Erro re-auth firebase:", e));
+                // Tenta autenticação anônima, mas ignora erro se não configurado
+                auth.signInAnonymously().catch((e:any) => {
+                    // Ignora erros específicos de configuração ausente (auth/configuration-not-found)
+                    // ou operação não permitida (auth/operation-not-allowed) para não sujar o console
+                    if (e.code !== 'auth/configuration-not-found' && e.code !== 'auth/operation-not-allowed') {
+                        console.error("Erro re-auth firebase:", e);
+                    }
+                });
             }
             return () => unsub();
         }
@@ -304,10 +314,12 @@ const AppContent = () => {
             const newLousa = getLousaDate();
             if (newOp !== currentOpDate) {
                 setCurrentOpDate(newOp);
+                // Reseta a data de análise para a nova data operacional se estivermos vendo "hoje"
                 if (analysisDate === currentOpDate) setAnalysisDate(newOp);
             }
             if (newLousa !== lousaDate) setLousaDate(newLousa);
         };
+        // Checa a cada minuto se virou o dia (03:00)
         const int = setInterval(checkDates, 60000);
         return () => clearInterval(int);
     }, [currentOpDate, lousaDate, analysisDate]);
@@ -363,6 +375,7 @@ const AppContent = () => {
                 setTableStatus(val.status || {});
                 setMadrugadaData(val.madrugada || {});
             } else {
+                // Se o dia virou (03:00) e não tem dados, reseta o estado
                 setTableStatus({});
                 setMadrugadaData({});
             }
@@ -371,12 +384,17 @@ const AppContent = () => {
         const lousaRef = db.ref(`daily_tables/${lousaDate}/lousaOrder`);
         const lousaCb = lousaRef.on('value', (snap: any) => {
             const val = snap.val();
-            let rawLousa = val || [];
-            const cleanLousa = rawLousa.map((item:any) => {
-                if (typeof item === 'string') return { vaga: item, uid: generateUniqueId(), riscado: false };
-                return item;
-            });
-            setLousaOrder(cleanLousa);
+            if (val) {
+                let rawLousa = val || [];
+                const cleanLousa = rawLousa.map((item:any) => {
+                    if (typeof item === 'string') return { vaga: item, uid: generateUniqueId(), riscado: false };
+                    return item;
+                });
+                setLousaOrder(cleanLousa);
+            } else {
+                // Reseta lousa se o dia virou
+                setLousaOrder([]);
+            }
         });
 
         const logRef = db.ref('access_timeline');
@@ -418,7 +436,8 @@ const AppContent = () => {
     useEffect(() => {
         // CORREÇÃO: Removemos isFireConnected do check
         if (!db || !user) return;
-        const nodes = ['passengers', 'drivers', 'trips', 'notes', 'lostFound', 'blocked_ips', 'newsletter'];
+        // Adicionado 'users' na lista de nodes
+        const nodes = ['passengers', 'drivers', 'trips', 'notes', 'lostFound', 'blocked_ips', 'newsletter', 'users'];
         const unsubs = nodes.map(node => {
             const ref = db.ref(node);
             const callback = ref.on('value', (snapshot) => {
@@ -445,6 +464,25 @@ const AppContent = () => {
         const len = spList.length;
         const mod = ((diff % len) + len) % len;
         return [...spList.slice(mod), ...spList.slice(0, mod)];
+    };
+
+    // NOVA FUNÇÃO: Rotação independente da Madrugada
+    const getRotatedMadrugadaList = (dateStr: string) => {
+        if (!madrugadaList || madrugadaList.length === 0) return [];
+
+        const start = new Date(`${rotationBaseDate}T00:00:00`).getTime(); 
+        const current = new Date(dateStr + 'T00:00:00').getTime();
+        const diff = Math.floor((current - start) / (86400000));
+        
+        // Aplica rotação APENAS na lista de vagas da madrugada
+        const len = madrugadaList.length;
+        const mod = ((diff % len) + len) % len;
+        const rotatedVagas = [...madrugadaList.slice(mod), ...madrugadaList.slice(0, mod)];
+
+        // Mapeia os IDs rotacionados para os objetos completos de motorista
+        return rotatedVagas.map((vagaId: string) => {
+            return spList.find((sp:any) => sp.vaga === vagaId) || { vaga: vagaId, name: 'Desconhecido' };
+        });
     };
 
     const getTableTimes = () => {
@@ -481,15 +519,6 @@ const AppContent = () => {
 
     const { confirmedTimes, startLousaTime } = getTableTimes();
     
-    // --- LÓGICA DE RODAGEM AUTOMÁTICA MADRUGADA ---
-    const currentRotatedList = getRotatedList(currentOpDate);
-    
-    // Filtra a lista rotacionada do dia para pegar APENAS quem participa da madrugada
-    // Isso garante que a ordem da madrugada siga a rodagem geral
-    const madrugadaOrderedList = useMemo(() => {
-        return currentRotatedList.filter((d:any) => madrugadaList.includes(d.vaga));
-    }, [currentRotatedList, madrugadaList]);
-
     // Ticker para forçar atualização das viagens temporárias
     useEffect(() => {
         const interval = setInterval(() => setUiTicker(prev => prev + 1), 15000);
@@ -567,9 +596,9 @@ const AppContent = () => {
                 const diffMinutes = (now.getTime() - slotDate.getTime()) / 60000;
 
                 // --- CRIAÇÃO DA VIAGEM TEMPORÁRIA ---
-                // Only create if we are AT OR PAST the slot time (positive diff)
-                // AND within the 45 minute active window.
-                if (diffMinutes >= 0 && diffMinutes <= 45) {
+                // Only create if we are AROUND the slot time (5 mins before -> 55 mins after)
+                // Expanded window to allow overlap and early creation
+                if (diffMinutes >= -5 && diffMinutes <= 55) {
                     
                     const driverSp = spList.find((d:any) => d.vaga === slot.vaga);
                     const driverDb = driverSp ? data.drivers.find((d:any) => d.name.toLowerCase() === driverSp.name.toLowerCase()) : null;
@@ -644,7 +673,8 @@ const AppContent = () => {
                     
                     const diff = (now.getTime() - slotDate.getTime()) / 60000;
                     
-                    if (diff > 45 || diff < 0) {
+                    // Relaxed expiration: Keep trip slightly longer to prevent flicker
+                    if (diff > 55 || diff < -5) {
                         db.ref('trips').child(t.id).remove();
                     } else {
                         const correctTripTime = addMinutes(activeSlot.time, 60);
@@ -1256,22 +1286,16 @@ const AppContent = () => {
         setVagaToBlock(null);
     };
 
-    const openMadrugadaTrip = (vaga: string) => {
+    const openMadrugadaTrip = (vaga: string, date: string) => {
         const sp = spList.find((s:any) => s.vaga === vaga);
         if (!sp) return notify("Vaga não encontrada na lista geral", "error");
         
         const driver = data.drivers.find((d:any) => d.name === sp.name);
         
-        // CORREÇÃO: Usar a mesma lógica da Tabela para decidir se é Madrugada de hoje ou amanhã
-        const isLateDay = new Date().getHours() >= 14;
-        const targetDate = (currentOpDate === getTodayDate() && isLateDay) 
-            ? dateAddDays(currentOpDate, 1) 
-            : currentOpDate;
-
         // BUSCA A VIAGEM PELOS ATRIBUTOS, NÃO PELO ID
         const existingTrip = data.trips.find((t:any) => 
             t.isMadrugada && 
-            t.date === targetDate && 
+            t.date === date && 
             t.vaga === vaga && 
             t.status !== 'Cancelada' // Ignora canceladas para permitir recriar
         );
@@ -1283,7 +1307,7 @@ const AppContent = () => {
                 isMadrugada: true, 
                 driverId: driver ? driver.id : '', 
                 time: '', // Vazio para forçar a escolha no modal
-                date: targetDate 
+                date: date 
             });
             setSuggestedTrip(null); // Nulo para abrir o formulário de configuração, não o resumo
             setEditingTripId(null);
@@ -1347,7 +1371,11 @@ const AppContent = () => {
 
     // ... (Main Render with updated props)
     return (
-        <div className={`h-screen w-screen overflow-hidden ${theme.bg} ${theme.text} font-sans flex`} onTouchStart={handleGlobalTouchStart} onTouchEnd={handleGlobalTouchEnd}>
+        <div className={`h-screen w-screen overflow-hidden ${theme.bg} ${theme.text} font-sans flex`} 
+             onTouchStart={handleGlobalTouchStart} 
+             onTouchEnd={handleGlobalTouchEnd}
+             onContextMenu={(e) => { e.preventDefault(); setCmdOpen(true); }} // ACESSO RÁPIDO (BOTÃO DIREITO)
+        >
              <Toast message={notification.message} type={notification.type} visible={notification.visible} />
              <ConfirmModal isOpen={confirmState.isOpen} title={confirmState.title} message={confirmState.message} onConfirm={confirmState.onConfirm} onCancel={() => setConfirmState((prev:any) => ({ ...prev, isOpen: false }))} type={confirmState.type} theme={theme} />
              
@@ -1396,7 +1424,7 @@ const AppContent = () => {
                         {view === 'trips' && <Viagens data={data} theme={theme} searchTerm={searchTerm} openEditTrip={openEditTrip} updateTripStatus={updateTripStatus} del={del} duplicateTrip={duplicateTrip} notify={notify} />}
                         {view === 'appointments' && <Agendamentos data={data} theme={theme} setFormData={setFormData} setModal={setModal} dbOp={dbOp} setSuggestedTrip={setSuggestedTrip} setEditingTripId={setEditingTripId} notify={notify} requestConfirm={requestConfirm} />}
                         
-                        {/* PASSAR A LISTA RODADA DA MADRUGADA PARA O COMPONENTE TABELA */}
+                        {/* Tabela Recebe Função para Calcular Listas Futuras */}
                         {view === 'table' && <Tabela 
                             data={data} theme={theme} tableTab={tableTab} setTableTab={setTableTab} 
                             currentOpDate={currentOpDate} getTodayDate={getTodayDate} analysisDate={analysisDate} setAnalysisDate={setAnalysisDate} 
@@ -1408,7 +1436,8 @@ const AppContent = () => {
                             addMadrugadaVaga={addMadrugadaVaga} madrugadaList={madrugadaList} handleMadrugadaDragStart={handleMadrugadaDragStart} handleMadrugadaDrop={handleMadrugadaDrop} removeMadrugadaVaga={removeMadrugadaVaga} toggleMadrugadaRiscado={toggleMadrugadaRiscado} spList={spList} madrugadaData={madrugadaData} openMadrugadaTrip={openMadrugadaTrip} 
                             cannedMessages={cannedMessages} addCannedMessage={addCannedMessage} updateCannedMessage={updateCannedMessage} deleteCannedMessage={deleteCannedMessage} handleCannedDragStart={handleCannedDragStart} handleCannedDrop={handleCannedDrop} handleGeneralDragStart={handleGeneralDragStart} handleGeneralDrop={handleGeneralDrop} 
                             addNullLousaItem={addNullLousaItem} notify={notify} 
-                            madrugadaOrderedList={getRotatedList(currentOpDate).filter((d:any) => madrugadaList.includes(d.vaga))} // NOVA PROP
+                            getRotatedList={getRotatedList} 
+                            getRotatedMadrugadaList={getRotatedMadrugadaList} // Nova prop
                         />}
                         
                         {(view === 'financeiro' || view === 'billing') && <Financeiro data={data} theme={theme} pricePerPassenger={pricePerPassenger} billingData={(() => { 
@@ -1474,7 +1503,8 @@ const AppContent = () => {
                         })()} billingDate={billingDate} prevBillingMonth={()=>setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth()-1, 1))} nextBillingMonth={()=>setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth()+1, 1))} togglePaymentStatus={(trip:any) => dbOp('update', 'trips', { id: trip.id, paymentStatus: trip.paymentStatus === 'Pago' ? 'Pendente' : 'Pago' })} sendBillingMessage={sendBillingMessage} del={del} setFormData={setFormData} setModal={setModal} openEditTrip={openEditTrip} user={user} notify={notify} />}
                         {view === 'achados' && <Achados data={data} theme={theme} searchTerm={searchTerm} dbOp={dbOp} del={del} notify={notify} />}
                         {view === 'lostFound' && <Achados data={data} theme={theme} searchTerm={searchTerm} dbOp={dbOp} del={del} notify={notify} />}
-                        {view === 'settings' && <Configuracoes user={user} theme={theme} restartTour={restartTour} setAiModal={setAiModal} geminiKey={geminiKey} setGeminiKey={setGeminiKey} saveApiKey={saveApiKey} ipToBlock={ipToBlock} setIpToBlock={setIpToBlock} blockIp={blockIp} data={data} del={del} ipHistory={ipHistory} ipLabels={ipLabels} saveIpLabel={saveIpLabel} changeTheme={changeTheme} themeKey={themeKey} dbOp={dbOp} pricePerPassenger={pricePerPassenger} notify={notify} requestConfirm={requestConfirm} />}
+                        {view === 'settings' && <Configuracoes user={user} theme={theme} restartTour={restartTour} setAiModal={setAiModal} geminiKey={geminiKey} setGeminiKey={setGeminiKey} saveApiKey={saveApiKey} ipToBlock={ipToBlock} setIpToBlock={setIpToBlock} blockIp={blockIp} data={data} del={del} ipHistory={ipHistory} ipLabels={ipLabels} saveIpLabel={saveIpLabel} changeTheme={changeTheme} themeKey={themeKey} dbOp={dbOp} pricePerPassenger={pricePerPassenger} notify={notify} requestConfirm={requestConfirm} setView={setView} />}
+                        {view === 'manageUsers' && <GerenciarUsuarios data={data} theme={theme} setView={setView} dbOp={dbOp} notify={notify} user={user} />}
                     </div>
                 </div>
             </div>
