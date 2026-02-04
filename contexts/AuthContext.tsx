@@ -67,6 +67,50 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
         initAuth();
     }, []);
 
+    // 3. Função de Logout
+    const logout = () => {
+        localStorage.removeItem('nexflow_session');
+        setUser(null);
+    };
+
+    // NOVO: Listener de Bloqueio em Tempo Real
+    useEffect(() => {
+        let unsubscribe: any = null;
+
+        const setupBlockListener = async () => {
+            // Só ativa o listener se tiver banco de dados
+            if (!db) return;
+
+            try {
+                const deviceId = await getDeviceFingerprint();
+                const blockRef = db.ref(`blocked_devices/${deviceId}`);
+                
+                // Escuta mudanças em tempo real neste nó
+                const callback = blockRef.on('value', (snapshot) => {
+                    if (snapshot.exists()) {
+                        // Se o nó existir, significa que o dispositivo foi banido
+                        // Força logout imediato
+                        if (user) {
+                            console.warn("Dispositivo banido em tempo real. Deslogando...");
+                            logout();
+                        }
+                    }
+                });
+
+                unsubscribe = () => blockRef.off('value', callback);
+            } catch (e) {
+                console.error("Erro ao configurar listener de bloqueio:", e);
+            }
+        };
+
+        setupBlockListener();
+
+        // Cleanup ao desmontar
+        return () => {
+            if (unsubscribe) unsubscribe();
+        };
+    }, [user, db]); // Depende de 'user' para reavaliar quando logar/deslogar
+
     // 2. Função de Login (DB First, Fallback to Constant)
     const login = async (u: string, p: string, coords: any): Promise<boolean> => {
         try {
@@ -77,7 +121,8 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
             if (db) {
                 const blockedSnap = await db.ref(`blocked_devices/${deviceId}`).once('value');
                 if (blockedSnap.exists()) {
-                    alert('Este dispositivo foi bloqueado pelo administrador. Entre em contato.');
+                    // SILENT FAIL: Não mostra alerta, apenas retorna false.
+                    // O usuário achará que a senha está errada ou o sistema falhou.
                     return false;
                 }
             }
@@ -181,12 +226,6 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
         }
         
         return false;
-    };
-
-    // 3. Função de Logout
-    const logout = () => {
-        localStorage.removeItem('nexflow_session');
-        setUser(null);
     };
 
     return (
