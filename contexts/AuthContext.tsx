@@ -178,7 +178,7 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
                 const expiry = Date.now() + 12 * 60 * 60 * 1000; // 12 horas
                 localStorage.setItem('nexflow_session', JSON.stringify({ user: userData, expiry }));
                 
-                // --- LOGGING DE ACESSO COM GEOCODIFICAÇÃO E FINGERPRINT ---
+                // --- LOGGING DE ACESSO COM GEOCODIFICAÇÃO, FINGERPRINT E AUTO-LIMPEZA ---
                 (async () => {
                     try {
                         const uaInfo = parseUserAgent(navigator.userAgent);
@@ -223,7 +223,39 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
                             }
                         }
 
-                        if (db) await db.ref('access_timeline').push(logData);
+                        if (db) {
+                            const timelineRef = db.ref('access_timeline');
+                            
+                            // Adiciona novo log
+                            await timelineRef.push(logData);
+
+                            // AUTO-LIMPEZA: Manter apenas os últimos 50 registros
+                            try {
+                                const snap = await timelineRef.orderByKey().limitToLast(50).once('value');
+                                if (snap.exists()) {
+                                    let oldestKeyToKeep: string | null = null;
+                                    // Firebase retorna em ordem (o primeiro da iteração é o mais antigo do grupo de 50)
+                                    snap.forEach((child) => {
+                                        if (!oldestKeyToKeep) oldestKeyToKeep = child.key;
+                                    });
+
+                                    if (oldestKeyToKeep) {
+                                        // Busca tudo que é anterior ao oldestKeyToKeep e deleta
+                                        const oldSnap = await timelineRef.orderByKey().endBefore(oldestKeyToKeep).once('value');
+                                        if (oldSnap.exists()) {
+                                            const updates: any = {};
+                                            oldSnap.forEach((child) => {
+                                                updates[child.key] = null;
+                                            });
+                                            await timelineRef.update(updates);
+                                            // console.log(`Limpeza concluída. ${Object.keys(updates).length} logs antigos removidos.`);
+                                        }
+                                    }
+                                }
+                            } catch (cleanupErr) {
+                                console.warn("Erro na limpeza de logs:", cleanupErr);
+                            }
+                        }
 
                     } catch (err) {
                         console.error("Erro fatal no logging:", err);
