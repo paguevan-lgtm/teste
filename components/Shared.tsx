@@ -60,146 +60,138 @@ export const Icons = {
     Command: (p:any) => <Icon {...p}><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></Icon>,
     CloudRain: (p:any) => <Icon {...p}><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></Icon>,
     Calculator: (p:any) => <Icon {...p}><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></Icon>,
-    Image: (p:any) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></Icon>
+    Image: (p:any) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></Icon>,
+    Fingerprint: (p:any) => <Icon {...p}><path d="M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 6" /><path d="M5 15.73A6 6 0 0 1 5 12a7 7 0 0 1 14 0 6 6 0 0 1-1.35 3.73" /><path d="M8.2 18.2A3 3 0 0 1 8 16.5c0-1.66 1.34-3 3-3 .2 0 .39.02.58.05" /><path d="M16.5 12.5a4.5 4.5 0 0 0-9 0 3 3 0 0 0 3 3" /><path d="M12 21v-1" /></Icon>,
+    Laptop: (p:any) => <Icon {...p}><rect x="2" y="3" width="20" height="14" rx="2" ry="2" /><line x1="2" y1="20" x2="22" y2="20" /></Icon>,
+    Smartphone: (p:any) => <Icon {...p}><rect x="5" y="2" width="14" height="20" rx="2" ry="2" /><line x1="12" y1="18" x2="12.01" y2="18" /></Icon>
 };
 
-export const Button = ({ onClick, children, theme, variant='primary', icon:I, disabled, className='', size='md', id='' }: any) => {
-    const t = theme || THEMES.default;
-    const sz: any = { sm:'px-3 py-2 text-sm', md:'px-4 py-3.5 text-base' };
-    const v: any = {
-        primary: `${t.primary} shadow-md premium-click`,
-        secondary: `${t.card} ${t.text} premium-click border ${t.border}`,
-        danger: `bg-rose-500/10 text-rose-500 border border-rose-500/20 active:bg-rose-500/20 premium-click`,
-        success: `bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 active:bg-emerald-500/20 premium-click`,
-        ai: `bg-ai text-white shadow-lg premium-click border-none`
-    };
-    return <button id={id} onClick={onClick} disabled={disabled} className={`flex items-center justify-center gap-2 ${t.radius} font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${v[variant]} ${sz[size]} ${className}`}>{I && <I size={size==='sm'?16:20} />} {children}</button>;
-};
+export const Button = ({ onClick, children, theme, variant='primary', icon:IconComp, disabled, className='', size='md', id='' }: any) => {
+    let baseClass = `${theme?.radius || 'rounded-xl'} font-bold transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 shadow-sm `;
+    
+    if (size === 'sm') baseClass += 'px-3 py-1.5 text-xs ';
+    else if (size === 'lg') baseClass += 'px-6 py-3 text-lg ';
+    else baseClass += 'px-4 py-2 text-sm ';
 
-export const IconButton = ({ onClick, icon:I, variant='default', theme, disabled }: any) => {
-     const t = theme || THEMES.default;
-     const v: any = {
-         default: `${t.card} ${t.text} hover:opacity-80 border ${t.border}`,
-         danger: `bg-rose-500/10 text-rose-500 border border-rose-500/20`,
-         success: `bg-emerald-500/10 text-emerald-500 border border-emerald-500/20`
-     }
-     return <button onClick={onClick} disabled={disabled} className={`w-12 h-12 flex-shrink-0 flex items-center justify-center ${t.radius} transition-all active:scale-95 disabled:opacity-50 ${v[variant]}`}><I size={22}/></button>
-}
+    if (disabled) baseClass += 'opacity-50 cursor-not-allowed ';
+    else baseClass += 'hover:opacity-90 ';
 
-export const Input = ({ label, theme, ...props }: any) => {
-    const t = theme || THEMES.default;
-    const innerClass = t.inner || 'bg-black/10 border-white/10 text-white';
+    if (variant === 'primary') baseClass += theme ? theme.primary : 'bg-blue-600 text-white';
+    else if (variant === 'secondary') baseClass += 'bg-white/10 hover:bg-white/20 text-white';
+    else if (variant === 'success') baseClass += 'bg-green-600 text-white hover:bg-green-500';
+    else if (variant === 'danger') baseClass += 'bg-red-500/20 text-red-400 hover:bg-red-500/30';
+    else if (variant === 'default') baseClass += 'bg-black/20 text-white hover:bg-black/30 border border-white/10';
+
     return (
-        <div className="flex flex-col gap-1 w-full">
-            <label className={`text-xs font-bold uppercase tracking-wider opacity-60 ml-1`}>{label}</label>
-            <input className={`border ${innerClass} ${t.radius} px-4 py-3.5 outline-none focus:border-current transition-colors w-full`} {...props} />
-        </div>
+        <button id={id} className={`${baseClass} ${className}`} onClick={onClick} disabled={disabled}>
+            {IconComp && <IconComp size={size === 'sm' ? 14 : (size === 'lg' ? 24 : 18)} />}
+            {children}
+        </button>
     );
 };
 
-export const Toast = ({ message, type = 'success', visible }: any) => {
-    if (!visible) return null;
-    const colors = { success: 'bg-green-500', error: 'bg-red-500', info: 'bg-blue-500' };
-    const icons = { success: <Icons.Check size={20}/>, error: <Icons.X size={20}/>, info: <Icons.Bell size={20}/> };
-    // @ts-ignore
-    const color = colors[type] || colors.info;
+export const IconButton = ({ onClick, icon:IconComp, theme, variant='default', className='', title, disabled, size=20 }: any) => {
+    let baseClass = `p-2 rounded-lg transition-all active:scale-90 flex items-center justify-center `;
+    if (variant === 'danger') baseClass += 'bg-red-500/10 text-red-400 hover:bg-red-500/20';
+    else if (variant === 'success') baseClass += 'bg-green-500/10 text-green-400 hover:bg-green-500/20';
+    else if (variant === 'primary') baseClass += 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20';
+    else baseClass += 'bg-white/5 hover:bg-white/10 text-white';
+
+    if (disabled) baseClass += ' opacity-50 cursor-not-allowed';
+
+    return (
+        <button className={`${baseClass} ${className}`} onClick={onClick} title={title} disabled={disabled}>
+            <IconComp size={size} />
+        </button>
+    );
+};
+
+export const Input = ({ label, value, onChange, type='text', placeholder, theme, themeKey, autoFocus, onFocus, onBlur, autoCapitalize }: any) => {
+    // If theme not provided but themeKey is, get from THEMES
+    const t = theme || (themeKey ? THEMES[themeKey] : THEMES.default);
     
     return (
-        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-[9999] flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${color} text-white animate-bounce-in min-w-[300px]`}>
-            {/* @ts-ignore */}
-            {icons[type]}
-            <span className="font-bold">{message}</span>
+        <div className="flex flex-col gap-1.5">
+            {label && <label className="text-xs font-bold opacity-60 ml-1">{label}</label>}
+            <input 
+                type={type} 
+                className={`${t.inner || 'bg-black/20'} ${t.border} ${t.radius || 'rounded-xl'} px-4 py-3 text-sm outline-none focus:border-current transition-colors w-full`}
+                value={value} 
+                onChange={onChange} 
+                placeholder={placeholder}
+                autoFocus={autoFocus}
+                onFocus={onFocus}
+                onBlur={onBlur}
+                autoCapitalize={autoCapitalize}
+            />
         </div>
     );
 };
-
-export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, type = 'danger', theme }: any) => {
-    if (!isOpen) return null;
-    const t = theme || THEMES.default;
-    
-    return (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-            <div className={`${t.card} w-full max-w-sm p-6 rounded-2xl border ${t.border} shadow-2xl transform transition-all scale-100 relative z-[99999]`}>
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-blue-500/10 text-blue-500'}`}>
-                    {type === 'danger' ? <Icons.Trash size={24} /> : <Icons.Bell size={24} />}
-                </div>
-                <h3 className="text-xl font-bold mb-2">{title}</h3>
-                <p className="text-sm opacity-70 mb-6 leading-relaxed">{message}</p>
-                <div className="flex gap-3">
-                    <button onClick={onCancel} className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl font-bold text-sm transition-colors text-current">Cancelar</button>
-                    <button onClick={onConfirm} className={`flex-1 py-3 rounded-xl font-bold text-sm text-white shadow-lg active:scale-95 transition-all ${type === 'danger' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}`}>Confirmar</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- PREMIUM WIDGETS ---
 
 export const ClockWidget = ({ theme }: any) => {
     const [time, setTime] = useState(new Date());
     useEffect(() => {
-        const t = setInterval(() => setTime(new Date()), 1000);
-        return () => clearInterval(t);
+        const int = setInterval(() => setTime(new Date()), 1000);
+        return () => clearInterval(int);
     }, []);
-
-    // Uses theme.inner for background instead of hardcoded
-    const innerBg = theme.inner ? theme.inner.split(' ')[0] : 'bg-white/5';
-
     return (
-        <div className={`${theme.card} rounded-xl p-4 border ${theme.border} flex items-center justify-between`}>
-            <div>
-                <div className="text-2xl font-black tracking-tight font-mono">{time.toLocaleTimeString()}</div>
-                <div className="text-xs opacity-60 uppercase font-bold tracking-widest">{time.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+        <div className={`${theme.card} p-4 rounded-2xl border ${theme.border} flex flex-col justify-center items-center h-full`}>
+            <div className="text-3xl font-black tabular-nums tracking-tighter">
+                {time.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
             </div>
-            <div className={`w-10 h-10 ${innerBg} rounded-full flex items-center justify-center animate-pulse text-amber-400`}>
-                <Icons.Clock size={20}/>
+            <div className="text-xs opacity-50 uppercase font-bold tracking-widest">
+                {time.toLocaleDateString('pt-BR', {weekday: 'long', day: '2-digit', month: 'short'})}
             </div>
         </div>
     );
 };
 
 export const WeatherWidget = ({ theme }: any) => {
-    const [temp, setTemp] = useState<number|null>(null);
-    const [code, setCode] = useState<number|null>(null); // WMO code
+    // Mock weather for now, or simple logic
+    return (
+        <div className={`${theme.card} p-4 rounded-2xl border ${theme.border} flex flex-col justify-center items-center h-full relative overflow-hidden group`}>
+            <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            <div className="text-3xl mb-1"><Icons.CloudRain size={32} className="text-blue-400"/></div>
+            <div className="text-xs font-bold opacity-70">Praia Grande</div>
+            <div className="text-[10px] opacity-40">28°C • Chuvoso</div>
+        </div>
+    );
+};
 
-    useEffect(() => {
-        if ("navigator" in window) {
-            navigator.geolocation.getCurrentPosition((pos) => {
-                const { latitude, longitude } = pos.coords;
-                // Using Open-Meteo (Free, No Key needed)
-                fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&timezone=auto`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.current) {
-                            setTemp(Math.round(data.current.temperature_2m));
-                            setCode(data.current.weather_code);
-                        }
-                    })
-                    .catch(err => console.error("Weather err", err));
-            }, () => console.log("Geo denied"));
-        }
-    }, []);
-
-    // Simple WMO code mapper
-    const getWeatherInfo = (c: number) => {
-        if (c === 0) return { icon: <Icons.Sun size={24} className="text-yellow-400"/>, label: 'Ensolarado' };
-        if (c >= 1 && c <= 3) return { icon: <Icons.CloudRain size={24} className="text-gray-400"/>, label: 'Nublado' };
-        if (c >= 51) return { icon: <Icons.CloudRain size={24} className="text-blue-400"/>, label: 'Chuvoso' };
-        return { icon: <Icons.Sun size={24} className="text-orange-400"/>, label: 'Clima' };
-    };
-
-    const info = code !== null ? getWeatherInfo(code) : { icon: <Icons.Sun size={24} className="opacity-20"/>, label: '--' };
-    const innerBg = theme.inner ? theme.inner.split(' ')[0] : 'bg-white/5';
+export const Toast = ({ message, type, visible }: any) => {
+    if (!visible) return null;
+    let bg = 'bg-slate-800';
+    if (type === 'success') bg = 'bg-green-600';
+    if (type === 'error') bg = 'bg-red-600';
+    if (type === 'info') bg = 'bg-blue-600';
 
     return (
-        <div className={`${theme.card} rounded-xl p-4 border ${theme.border} flex items-center justify-between`}>
-            <div>
-                <div className="text-2xl font-black tracking-tight">{temp !== null ? `${temp}°C` : '--'}</div>
-                <div className="text-xs opacity-60 uppercase font-bold tracking-widest">{info.label}</div>
-            </div>
-            <div className={`w-10 h-10 ${innerBg} rounded-full flex items-center justify-center`}>
-                {info.icon}
+        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-[9999] px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 text-white font-bold text-sm animate-bounce-in ${bg}`}>
+            {type === 'success' && <Icons.CheckCircle size={18}/>}
+            {type === 'error' && <Icons.X size={18}/>}
+            {type === 'info' && <Icons.Bell size={18}/>}
+            {message}
+        </div>
+    );
+};
+
+export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, type='danger', theme }: any) => {
+    if (!isOpen) return null;
+    const t = theme || THEMES.default;
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+            <div className={`${t.card} w-full max-w-sm p-6 rounded-2xl border ${t.border} shadow-2xl transform scale-100 transition-all`}>
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${type === 'danger' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
+                    {type === 'danger' ? <Icons.Trash size={24}/> : <Icons.Bell size={24}/>}
+                </div>
+                <h3 className="text-xl font-bold mb-2">{title}</h3>
+                <p className="text-sm opacity-70 mb-6 leading-relaxed">{message}</p>
+                <div className="grid grid-cols-2 gap-3">
+                    <button onClick={onCancel} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 font-bold text-sm transition-colors">Cancelar</button>
+                    <button onClick={onConfirm} className={`px-4 py-2 rounded-xl font-bold text-sm text-white shadow-lg transition-transform active:scale-95 ${type === 'danger' ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}>
+                        Confirmar
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -210,53 +202,44 @@ export const CommandPalette = ({ isOpen, onClose, theme, actions }: any) => {
     const inputRef = useRef<any>(null);
 
     useEffect(() => {
-        if (isOpen && inputRef.current) setTimeout(() => inputRef.current.focus(), 50);
-        if (!isOpen) setQuery('');
+        if (isOpen && inputRef.current) setTimeout(() => inputRef.current.focus(), 100);
     }, [isOpen]);
 
-    const filtered = actions.filter((a:any) => a.label.toLowerCase().includes(query.toLowerCase()));
-    
-    // Theme adaptations
-    const innerClass = theme.inner || 'bg-white/5';
-    const ghostClass = theme.ghost || 'hover:bg-white/10';
-    const dividerClass = theme.divider || 'border-white/10';
-
     if (!isOpen) return null;
+    
+    const filtered = actions.filter((a:any) => a.label.toLowerCase().includes(query.toLowerCase()));
 
     return (
-        <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[15vh] px-4" onClick={onClose}>
-            <div className={`${theme.card} w-full max-w-xl rounded-xl border ${theme.border} shadow-2xl overflow-hidden flex flex-col max-h-[60vh]`} onClick={e => e.stopPropagation()}>
-                <div className={`border-b ${dividerClass} p-4 flex items-center gap-3`}>
+        <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[20vh] bg-black/60 backdrop-blur-sm px-4" onClick={onClose}>
+            <div className={`${theme.card} w-full max-w-lg rounded-xl border ${theme.border} shadow-2xl overflow-hidden flex flex-col max-h-[60vh]`} onClick={e => e.stopPropagation()}>
+                <div className="p-4 border-b border-white/10 flex items-center gap-3">
                     <Icons.Search className="opacity-50"/>
                     <input 
                         ref={inputRef}
-                        className={`bg-transparent outline-none flex-1 text-lg placeholder-current opacity-80`}
+                        className="bg-transparent outline-none w-full text-lg placeholder-white/30"
                         placeholder="O que você precisa?"
                         value={query}
                         onChange={e => setQuery(e.target.value)}
                     />
-                    <div className="text-xs bg-black/10 px-2 py-1 rounded opacity-50">ESC</div>
+                    <div className="text-[10px] font-bold border border-white/10 rounded px-1.5 py-0.5 opacity-50">ESC</div>
                 </div>
                 <div className="overflow-y-auto p-2">
-                    {filtered.length > 0 ? filtered.map((action:any, i:number) => (
+                    {filtered.map((action:any, i:number) => (
                         <button 
                             key={i} 
+                            className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/10 group transition-colors"
                             onClick={() => { action.action(); onClose(); }}
-                            className={`w-full flex items-center gap-3 p-3 rounded-lg ${ghostClass} transition-colors text-left group`}
                         >
-                            <div className={`p-2 rounded ${innerClass} group-hover:opacity-80 text-${action.color || 'current'}`}>
-                                {action.icon}
+                            <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-md bg-${action.color || 'gray-500'}/20 text-${action.color || 'gray-400'}`}>
+                                    {action.icon}
+                                </div>
+                                <span className="font-medium">{action.label}</span>
                             </div>
-                            <div className="flex-1">
-                                <div className="font-bold text-sm">{action.label}</div>
-                                {action.desc && <div className="text-xs opacity-50">{action.desc}</div>}
-                            </div>
-                            {action.shortcut && <span className="text-xs font-mono opacity-30">{action.shortcut}</span>}
+                            {action.shortcut && <span className="text-xs font-mono opacity-40 border border-white/10 px-1 rounded">{action.shortcut}</span>}
                         </button>
-                    )) : <div className="p-4 text-center opacity-40 text-sm">Nada encontrado.</div>}
-                </div>
-                <div className={`p-2 border-t ${dividerClass} bg-black/5 text-[10px] opacity-40 text-center uppercase font-bold tracking-widest`}>
-                    Bora de Van Command Center
+                    ))}
+                    {filtered.length === 0 && <div className="p-4 text-center opacity-40 text-sm">Nada encontrado.</div>}
                 </div>
             </div>
         </div>
@@ -264,37 +247,40 @@ export const CommandPalette = ({ isOpen, onClose, theme, actions }: any) => {
 };
 
 export const QuickCalculator = ({ isOpen, onClose, theme }: any) => {
-    const [display, setDisplay] = useState('');
+    const [expr, setExpr] = useState('');
     
     if (!isOpen) return null;
 
-    const btnClass = `flex-1 h-12 rounded-lg font-bold text-lg hover:brightness-110 active:scale-95 transition-all`;
-    const innerBg = theme.inner || 'bg-black/30';
-    const ghostBg = theme.ghost || 'bg-white/10';
-
-    const handle = (v: string) => {
-        if (v === 'C') setDisplay('');
+    const handleBtn = (v: string) => {
+        if (v === 'C') setExpr('');
         else if (v === '=') {
-            try { setDisplay(eval(display).toString()); } catch { setDisplay('Erro'); }
-        } else setDisplay(display + v);
+            try {
+                // eslint-disable-next-line no-eval
+                setExpr(eval(expr).toString());
+            } catch {
+                setExpr('Erro');
+            }
+        } else {
+            setExpr(prev => prev + v);
+        }
     };
 
+    const btns = ['7','8','9','/','4','5','6','*','1','2','3','-','C','0','=','+'];
+
     return (
-        <div className="fixed bottom-20 right-4 md:right-8 z-[9000] animate-bounce-in">
-            <div className={`${theme.card} w-64 p-4 rounded-2xl border ${theme.border} shadow-2xl`}>
-                <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-bold uppercase opacity-50">Calc</span>
-                    <button onClick={onClose}><Icons.X size={14} className="opacity-50 hover:opacity-100"/></button>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+            <div className={`${theme.card} w-72 p-4 rounded-2xl border ${theme.border} shadow-2xl`} onClick={e => e.stopPropagation()}>
+                <div className="bg-black/40 rounded-xl p-4 mb-4 text-right text-2xl font-mono overflow-x-auto whitespace-nowrap">
+                    {expr || '0'}
                 </div>
-                <div className={`${innerBg} rounded-lg p-3 text-right font-mono text-xl mb-3 overflow-hidden h-12 flex items-center justify-end border ${theme.border}`}>{display || '0'}</div>
                 <div className="grid grid-cols-4 gap-2">
-                    {['7','8','9','/','4','5','6','*','1','2','3','-','C','0','=','+'].map(k => (
+                    {btns.map(b => (
                         <button 
-                            key={k} 
-                            onClick={()=>handle(k)} 
-                            className={`${btnClass} ${['/','*','-','+','='].includes(k) ? theme.primary : ghostBg}`}
+                            key={b} 
+                            onClick={() => handleBtn(b)}
+                            className={`p-4 rounded-xl font-bold text-lg hover:bg-white/10 transition-colors ${b === '=' ? 'bg-amber-600 text-white col-span-1' : 'bg-white/5'}`}
                         >
-                            {k}
+                            {b}
                         </button>
                     ))}
                 </div>
