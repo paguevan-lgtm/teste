@@ -1,8 +1,0 @@
-{
-  "name": "Copy of Bora de Van - Gestão",
-  "description": "Sistema de gestão de transporte, vans e passageiros.",
-  "requestFramePermissions": [
-    "geolocation",
-    "microphone"
-  ]
-}
