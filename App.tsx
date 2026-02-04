@@ -5,6 +5,7 @@ import { Icons, Toast, ConfirmModal, CommandPalette, QuickCalculator } from './c
 import { TourGuide } from './components/Tour';
 import { LoginScreen } from './pages/Login';
 import { getTodayDate, getOperationalDate, getLousaDate, generateUniqueId, callGemini, getAvatarUrl, getBairroIdx, formatDisplayDate, dateAddDays, addMinutes } from './utils';
+import { SubscriptionModal } from './components/SubscriptionModal';
 
 // Context Auth
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -99,6 +100,12 @@ const AppContent = () => {
     const [notification, setNotification] = useState({ message: '', type: 'info', visible: false });
     const [confirmState, setConfirmState] = useState<any>({ isOpen: false, title: '', message: '', onConfirm: () => {}, type: 'danger' });
 
+    // PAYWALL STATE - Default Locked (True) unless Breno
+    const [isSystemLocked, setIsSystemLocked] = useState(() => {
+        // Se usuário não carregou ainda, assume bloqueado por segurança
+        return true;
+    });
+
     // Tour
     const [runTour, setRunTour] = useState(false);
     const [tourStep, setTourStep] = useState(0);
@@ -159,16 +166,6 @@ const AppContent = () => {
         return (max + 1).toString(); 
     };
 
-    // Helper específico para Viagens para garantir sequencial sem falhas
-    const generateNextTripId = () => {
-        const trips = data.trips || [];
-        const max = trips.reduce((acc: number, t: any) => {
-            const idNum = parseInt(t.id);
-            return !isNaN(idNum) ? Math.max(acc, idNum) : acc;
-        }, 0);
-        return (max + 1).toString();
-    };
-
     const dbOp = async (type: string, node: string, payload: any) => {
         if(!db) return notify("Sem conexão DB.", "error");
         try {
@@ -192,11 +189,35 @@ const AppContent = () => {
         } catch(e: any) { notify("Erro ao salvar: " + e.message, "error"); }
     };
 
+    const loadOlderTrips = async () => {
+        if (!db) return;
+        const currentTrips = data.trips;
+        if (currentTrips.length === 0) return;
+        const sortedIds = currentTrips.map((t:any) => parseInt(t.id)).sort((a:number, b:number) => a - b);
+        const minId = sortedIds[0];
+        notify("Carregando histórico antigo...", "info");
+        try {
+            const snap = await db.ref('trips').orderByKey().endBefore(minId.toString()).limitToLast(200).once('value');
+            const val = snap.val();
+            if (val) {
+                const newTrips = Object.keys(val).map(key => ({ id: key, ...val[key] }));
+                setData((prev: any) => {
+                    const existingIds = new Set(prev.trips.map((t:any) => t.id));
+                    const uniqueNew = newTrips.filter((t:any) => !existingIds.has(t.id));
+                    return { ...prev, trips: [...prev.trips, ...uniqueNew] };
+                });
+                notify(`${newTrips.length} viagens antigas carregadas.`, "success");
+            } else {
+                notify("Fim do histórico.", "info");
+            }
+        } catch (e) {
+            console.error(e);
+            notify("Erro ao buscar histórico.", "error");
+        }
+    };
+
     const changeTheme = (t: string) => { setThemeKey(t); if(user) { dbOp('update', 'preferences', { theme: t }); localStorage.setItem(`${user.username}_nexflow_theme`, t); } };
 
-    // --- EFEITOS E LOGICA ---
-
-    // GLOBAL SHORTCUTS
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -222,18 +243,11 @@ const AppContent = () => {
 
     useEffect(() => { setSearchTerm(''); }, [view]);
 
-    // Tour Effect: Controla abertura de menus/abas durante o tour
     useEffect(() => {
         if (!runTour) return;
         const step = TOUR_STEPS[tourStep];
         if (!step) return;
-
-        // Se o passo tiver uma 'view' associada, muda a tela automaticamente
-        if (step.view && step.view !== view) {
-            setView(step.view);
-        }
-
-        // Se estiver no mobile e o alvo for o menu, abre o menu
+        if (step.view && step.view !== view) setView(step.view);
         const isMobile = window.innerWidth < 768;
         if (isMobile) {
             const isMenuTarget = step.target && step.target.includes('sidebar');
@@ -242,29 +256,14 @@ const AppContent = () => {
     }, [tourStep, runTour]);
 
     useEffect(() => {
-        fetch('https://ipwho.is/')
-            .then(r => r.json())
-            .then(d => {
-                if (d.success) setCurrentIp(d.ip);
-                else fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d2 => setCurrentIp(d2.ip)).catch(e => console.error("Erro IP Fallback:", e));
-            })
-            .catch(e => console.error("Erro IP Geo:", e));
+        fetch('https://ipwho.is/').then(r => r.json()).then(d => { if (d.success) setCurrentIp(d.ip); }).catch(e => console.error(e));
     }, []);
 
     useEffect(() => {
         if(auth) {
-            const unsub = auth.onAuthStateChanged((u: any) => {
-                setIsFireConnected(!!u);
-            });
+            const unsub = auth.onAuthStateChanged((u: any) => setIsFireConnected(!!u));
             if (isAuthenticated && !auth.currentUser) {
-                // Tenta autenticação anônima, mas ignora erro se não configurado
-                auth.signInAnonymously().catch((e:any) => {
-                    // Ignora erros específicos de configuração ausente (auth/configuration-not-found)
-                    // ou operação não permitida (auth/operation-not-allowed) para não sujar o console
-                    if (e.code !== 'auth/configuration-not-found' && e.code !== 'auth/operation-not-allowed') {
-                        console.error("Erro re-auth firebase:", e);
-                    }
-                });
+                auth.signInAnonymously().catch((e:any) => { if (e.code !== 'auth/configuration-not-found' && e.code !== 'auth/operation-not-allowed') console.error("Erro re-auth firebase:", e); });
             }
             return () => unsub();
         }
@@ -274,22 +273,16 @@ const AppContent = () => {
         if (user) {
             const savedTheme = localStorage.getItem(`${user.username}_nexflow_theme`);
             if(savedTheme) setThemeKey(savedTheme);
-
             const tourSeen = localStorage.getItem(`tour_seen_${user.username}`);
             if (!tourSeen) setTimeout(() => setRunTour(true), 1500);
         }
     }, [user]);
 
-    // Lógica para verificar Novidades
     useEffect(() => {
         if (data.newsletter && data.newsletter.length > 0 && user) {
-            // Ordena para pegar a mais recente
             const sortedNews = [...data.newsletter].sort((a:any, b:any) => b.timestamp - a.timestamp);
             const latest = sortedNews[0];
-            
             const lastSeenId = localStorage.getItem(`last_news_seen_${user.username}`);
-            
-            // Se o ID da última notícia for diferente do visto, mostra o modal
             if (lastSeenId !== latest.id) {
                 setLatestNews(latest);
                 setShowNewsModal(true);
@@ -297,74 +290,70 @@ const AppContent = () => {
         }
     }, [data.newsletter, user]);
 
-    const markNewsAsSeen = () => {
-        if (latestNews && user) {
-            localStorage.setItem(`last_news_seen_${user.username}`, latestNews.id);
+    // PAYWALL / MENSALIDADE LISTENER
+    useEffect(() => {
+        // Se ainda não temos usuário, mantemos bloqueado (estado inicial)
+        if (!user) return;
+
+        // Se for o Breno (case insensitive), nunca bloqueia
+        if (user.username.toLowerCase() === 'breno') {
+            setIsSystemLocked(false);
+            return;
         }
+
+        // Para outros usuários, verifica o DB
+        if (db) {
+            const subRef = db.ref('system_status/subscription');
+            const subCb = subRef.on('value', (snap: any) => {
+                const val = snap.val();
+                if (val) {
+                    // Se tem dados, verifica expiração
+                    const now = Date.now();
+                    if (val.isActive && val.expiresAt > now) {
+                        setIsSystemLocked(false);
+                    } else {
+                        setIsSystemLocked(true);
+                    }
+                } else {
+                    // Se não tem dados no DB (ex: DB zerado), BLOQUEIA por padrão
+                    setIsSystemLocked(true);
+                }
+            });
+            return () => subRef.off('value', subCb);
+        }
+    }, [db, user, isFireConnected]);
+
+    const markNewsAsSeen = () => {
+        if (latestNews && user) localStorage.setItem(`last_news_seen_${user.username}`, latestNews.id);
         setShowNewsModal(false);
     };
 
-    // Effect to auto-update dates
     useEffect(() => {
         const checkDates = () => {
             const newOp = getOperationalDate();
             const newLousa = getLousaDate();
             if (newOp !== currentOpDate) {
                 setCurrentOpDate(newOp);
-                // Reseta a data de análise para a nova data operacional se estivermos vendo "hoje"
                 if (analysisDate === currentOpDate) setAnalysisDate(newOp);
             }
             if (newLousa !== lousaDate) setLousaDate(newLousa);
         };
-        // Checa a cada minuto se virou o dia (03:00)
         const int = setInterval(checkDates, 60000);
         return () => clearInterval(int);
     }, [currentOpDate, lousaDate, analysisDate]);
 
     useEffect(() => {
-        // CORREÇÃO: Removemos isFireConnected para permitir leitura se o DB for publico ou auth estiver lento
         if(!db || !user) return; 
-        
         const msgRef = db.ref('canned_messages_config/list');
-        const msgCb = msgRef.on('value', (snap: any) => {
-            const val = snap.val();
-            let list = [];
-            if (Array.isArray(val)) list = val.filter(Boolean); 
-            else if (val && typeof val === 'object') list = Object.values(val);
-            setCannedMessages(list);
-        });
-
-        // Ouve a lista global de motoristas
+        const msgCb = msgRef.on('value', (snap: any) => setCannedMessages(snap.val() || []));
         const driversRef = db.ref('drivers_table_list');
-        const driversCb = driversRef.on('value', (snap: any) => {
-            const val = snap.val();
-            if(val) {
-                setSpList(val);
-            } else {
-                db.ref('drivers_table_list').set(INITIAL_SP_LIST);
-                setSpList(INITIAL_SP_LIST);
-            }
-        });
-
-        // Ouve a Data Base de Rotação
+        const driversCb = driversRef.on('value', (snap: any) => setSpList(snap.val() || INITIAL_SP_LIST));
         const rotDateRef = db.ref('system_settings/rotation_base_date');
-        const rotDateCb = rotDateRef.on('value', (snap: any) => {
-            const val = snap.val();
-            if (val) setRotationBaseDate(val);
-        });
-
+        const rotDateCb = rotDateRef.on('value', (snap: any) => { if (snap.val()) setRotationBaseDate(snap.val()); });
         const priceRef = db.ref('system_settings/price_per_passenger');
-        const priceCb = priceRef.on('value', (snap: any) => {
-            if (snap.val()) setPricePerPassenger(Number(snap.val()));
-        });
-
+        const priceCb = priceRef.on('value', (snap: any) => { if (snap.val()) setPricePerPassenger(Number(snap.val())); });
         const madConfigRef = db.ref('madrugada_config/list');
-        const madConfigCb = madConfigRef.on('value', (snap: any) => {
-            const val = snap.val();
-            // CORREÇÃO: Não usar valores padrão se o banco retornar null (lista vazia)
-            setMadrugadaList(val || []);
-        });
-
+        const madConfigCb = madConfigRef.on('value', (snap: any) => setMadrugadaList(snap.val() || []));
         const dailyRef = db.ref(`daily_tables/${currentOpDate}`);
         const dailyCb = dailyRef.on('value', (snap: any) => {
             const val = snap.val();
@@ -372,12 +361,10 @@ const AppContent = () => {
                 setTableStatus(val.status || {});
                 setMadrugadaData(val.madrugada || {});
             } else {
-                // Se o dia virou (03:00) e não tem dados, reseta o estado
                 setTableStatus({});
                 setMadrugadaData({});
             }
         });
-
         const lousaRef = db.ref(`daily_tables/${lousaDate}/lousaOrder`);
         const lousaCb = lousaRef.on('value', (snap: any) => {
             const val = snap.val();
@@ -389,23 +376,17 @@ const AppContent = () => {
                 });
                 setLousaOrder(cleanLousa);
             } else {
-                // Reseta lousa se o dia virou
                 setLousaOrder([]);
             }
         });
-
         const logRef = db.ref('access_timeline');
         const logCb = logRef.limitToLast(50).on('value', (snap: any) => {
             const val = snap.val();
             const list = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })).reverse() : [];
             setIpHistory(list);
         });
-
         const labelsRef = db.ref('ip_labels');
-        const labelsCb = labelsRef.on('value', (snap: any) => {
-            setIpLabels(snap.val() || {});
-        });
-
+        const labelsCb = labelsRef.on('value', (snap: any) => setIpLabels(snap.val() || {}));
         const savedMenuRef = db.ref(`user_data/${user.username}/preferences/menuOrder`); 
         const savedMenuCb = savedMenuRef.on('value', (snap: any) => { 
             const savedOrder = snap.val(); 
@@ -428,957 +409,361 @@ const AppContent = () => {
             labelsRef.off('value', labelsCb);
             savedMenuRef.off('value', savedMenuCb);
         }
-    }, [db, user, isFireConnected, currentOpDate, lousaDate]); // mantem isFireConnected para trigger, mas remove do if
+    }, [db, user, isFireConnected, currentOpDate, lousaDate]);
 
     useEffect(() => {
-        // CORREÇÃO: Removemos isFireConnected do check
         if (!db || !user) return;
-        // Adicionado 'users' na lista de nodes
-        const nodes = ['passengers', 'drivers', 'trips', 'notes', 'lostFound', 'blocked_ips', 'newsletter', 'users'];
-        const unsubs = nodes.map(node => {
+        const smallNodes = ['passengers', 'drivers', 'notes', 'lostFound', 'blocked_ips', 'newsletter', 'users'];
+        const unsubs = smallNodes.map(node => {
             const ref = db.ref(node);
             const callback = ref.on('value', (snapshot) => {
                 const val = snapshot.val();
                 const list = val ? Object.keys(val).map(key => ({ id: key, ...val[key] })) : [];
-                if (['passengers', 'drivers', 'trips'].includes(node)) {
+                if (['passengers', 'drivers'].includes(node)) {
                     list.sort((a:any, b:any) => parseInt(b.id) - parseInt(a.id));
                 }
                 setData((prev:any) => ({ ...prev, [node]: list }));
             });
             return () => ref.off('value', callback);
         });
-        return () => unsubs.forEach(fn => fn());
-    }, [user, isFireConnected]); // Trigger se conectar
 
-    // --- FUNÇÕES ---
-
-    const getRotatedList = (dateStr: string) => {
-        if (!spList || spList.length === 0) return [];
-        // Usa a data base dinâmica (vinda do Firebase) ou o fallback
-        const start = new Date(`${rotationBaseDate}T00:00:00`).getTime(); 
-        const current = new Date(dateStr + 'T00:00:00').getTime();
-        const diff = Math.floor((current - start) / (86400000));
-        const len = spList.length;
-        const mod = ((diff % len) + len) % len;
-        return [...spList.slice(mod), ...spList.slice(0, mod)];
-    };
-
-    // NOVA FUNÇÃO: Rotação independente da Madrugada
-    const getRotatedMadrugadaList = (dateStr: string) => {
-        if (!madrugadaList || madrugadaList.length === 0) return [];
-
-        const start = new Date(`${rotationBaseDate}T00:00:00`).getTime(); 
-        const current = new Date(dateStr + 'T00:00:00').getTime();
-        const diff = Math.floor((current - start) / (86400000));
-        
-        // Aplica rotação APENAS na lista de vagas da madrugada
-        const len = madrugadaList.length;
-        const mod = ((diff % len) + len) % len;
-        const rotatedVagas = [...madrugadaList.slice(mod), ...madrugadaList.slice(0, mod)];
-
-        // Mapeia os IDs rotacionados para os objetos completos de motorista
-        return rotatedVagas.map((vagaId: string) => {
-            return spList.find((sp:any) => sp.vaga === vagaId) || { vaga: vagaId, name: 'Desconhecido' };
-        });
-    };
-
-    const getTableTimes = () => {
-        const list = getRotatedList(currentOpDate); 
-        const confirmedTimes: any = {}; 
-        let confirmCount = 0;
-        
-        // Base time is 06:00 of the CURRENT OPERATIONAL DATE
-        const [y, m, d] = currentOpDate.split('-').map(Number);
-        let lastConfirmTime = new Date(y, m - 1, d, 6, 0, 0); 
-
-        list.forEach((driver:any) => {
-            if (tableStatus[driver.vaga] === 'confirmed') {
-                const time = new Date(lastConfirmTime.getTime() + confirmCount * 30 * 60000);
-                confirmedTimes[driver.vaga] = time.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit', hour12: false});
-                confirmCount++;
-            }
+        const tripsRef = db.ref('trips').orderByKey().limitToLast(300);
+        const tripsCb = tripsRef.on('value', (snapshot: any) => {
+            const val = snapshot.val();
+            const list = val ? Object.keys(val).map(key => ({ id: key, ...val[key] })) : [];
+            list.sort((a:any, b:any) => parseInt(b.id) - parseInt(a.id));
+            setData((prev:any) => {
+                const currentMap = new Map(prev.trips.map((t:any) => [t.id, t]));
+                list.forEach((t:any) => currentMap.set(t.id, t));
+                const mergedList = Array.from(currentMap.values()).sort((a:any, b:any) => parseInt(b.id) - parseInt(a.id));
+                return { ...prev, trips: mergedList };
+            });
         });
 
-        const startLousaTime = new Date(lastConfirmTime.getTime() + confirmCount * 30 * 60000);
-        return { confirmedTimes, startLousaTime };
-    };
-
-    const isTimeExpired = (timeStr: string) => {
-        if(!timeStr) return false;
-        const now = new Date();
-        const [h, m] = timeStr.split(':').map(Number);
-        const confirmedDate = new Date();
-        confirmedDate.setHours(h, m, 0, 0);
-        let diff = now.getTime() - confirmedDate.getTime();
-        if (diff < -12 * 60 * 60 * 1000) diff += 24 * 60 * 60 * 1000; 
-        return diff > 30 * 60000;
-    };
-
-    const { confirmedTimes, startLousaTime } = getTableTimes();
-    
-    // Ticker para forçar atualização das viagens temporárias
-    useEffect(() => {
-        const interval = setInterval(() => setUiTicker(prev => prev + 1), 15000);
-        return () => clearInterval(interval);
-    }, []);
-
-    // LÓGICA DE VIAGEM TEMPORÁRIA
-    useEffect(() => {
-        // CORREÇÃO: Removido !isFireConnected para permitir funcionamento com DB público
-        if (!db || !user) return; 
-
-        const manageTempTrips = () => {
-            const now = new Date();
-            const { confirmedTimes, startLousaTime } = getTableTimes();
-            
-            const activeSlotsMap = new Map();
-
-            getRotatedList(currentOpDate).forEach((driver:any) => {
-                if (tableStatus[driver.vaga] === 'confirmed') {
-                    activeSlotsMap.set(driver.vaga, { 
-                        vaga: driver.vaga, 
-                        time: confirmedTimes[driver.vaga] 
-                    });
-                }
-            });
-
-            let lousaIndex = 0;
-            lousaOrder.forEach((item:any) => {
-                // If 'baixou', it doesn't consume time, just moves to end.
-                if (item.baixou) return;
-
-                if (!item.riscado && !item.isNull) {
-                    const t = new Date(startLousaTime.getTime() + lousaIndex * 30 * 60000);
-                    const timeStr = t.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit', hour12: false});
-                    activeSlotsMap.set(item.vaga, { 
-                        vaga: item.vaga, 
-                        time: timeStr 
-                    });
-                }
-                
-                // Increment logic:
-                // Normal items increment time.
-                // 'isNull' (Skipped slots) ALSO increment time.
-                // 'riscado' does NOT increment time (next person takes slot immediately).
-                if (item.isNull || !item.riscado) {
-                    lousaIndex++;
-                }
-            });
-
-            const activeSlots = Array.from(activeSlotsMap.values());
-
-            // CALCULA O PRÓXIMO ID SEQUENCIAL (INTEIRO)
-            let currentMaxId = data.trips.reduce((max: number, t: any) => {
-                if (t.id && /^\d+$/.test(t.id)) {
-                    const idNum = parseInt(t.id);
-                    return Math.max(max, idNum);
-                }
-                return max;
-            }, 0);
-
-            // 1. ITERATE ACTIVE SLOTS TO CREATE TRIPS IF IN WINDOW
-            activeSlots.forEach((slot:any) => {
-                if (!slot.time) return;
-                
-                const [h, m] = slot.time.split(':').map(Number);
-                
-                // Construct Date strictly based on Operational Date
-                const [yOp, mOp, dOp] = currentOpDate.split('-').map(Number);
-                const slotDate = new Date(yOp, mOp - 1, dOp, h, m, 0);
-
-                // Logic: If slot hour is small (e.g. 0, 1, 2, 3, 4) AND OpDate starts at 6, it's the next day.
-                if (h < 5) {
-                    slotDate.setDate(slotDate.getDate() + 1);
-                }
-
-                const diffMinutes = (now.getTime() - slotDate.getTime()) / 60000;
-
-                // --- CRIAÇÃO DA VIAGEM TEMPORÁRIA ---
-                // Janela Rígida: Cria APENAS quando chegar a hora (0 min) e mantém por 45 min.
-                if (diffMinutes >= 0 && diffMinutes <= 45) {
-                    
-                    const driverSp = spList.find((d:any) => d.vaga === slot.vaga);
-                    const driverDb = driverSp ? data.drivers.find((d:any) => d.name.toLowerCase() === driverSp.name.toLowerCase()) : null;
-                    
-                    if (!driverDb) return;
-
-                    const slotDateStr = [
-                        slotDate.getFullYear(),
-                        String(slotDate.getMonth() + 1).padStart(2, '0'),
-                        String(slotDate.getDate()).padStart(2, '0')
-                    ].join('-');
-
-                    // CORREÇÃO: Calcular Data Final da Viagem ANTES de checar existência
-                    const tripTime = addMinutes(slot.time, 60);
-                    const [sH] = slot.time.split(':').map(Number);
-                    const [tH] = tripTime.split(':').map(Number);
-                    
-                    let finalTripDate = slotDateStr;
-                    // Se a viagem cruzar a meia noite (Ex: Slot 23:30 -> Trip 00:30), a data avança
-                    if (tH < sH) {
-                         finalTripDate = dateAddDays(slotDateStr, 1);
-                    }
-
-                    // Check if trip exists for THIS driver on THIS *FINAL* date
-                    const exists = data.trips.some((t:any) => 
-                        t.driverId === driverDb.id && 
-                        t.date === finalTripDate && // Usar a data CALCULADA, não a data do slot
-                        (t.isTemp || t.status !== 'Cancelada')
-                    );
-
-                    if (!exists) {
-                        currentMaxId++;
-                        const nextId = currentMaxId.toString();
-
-                        const newTrip = {
-                            id: nextId, 
-                            driverId: driverDb.id,
-                            driverName: driverDb.name,
-                            time: tripTime, 
-                            date: finalTripDate,
-                            passengerIds: [],
-                            status: 'Em andamento',
-                            isTemp: true,
-                            vaga: slot.vaga
-                        };
-                        db.ref('trips').child(newTrip.id).set(newTrip);
-                    }
-                }
-            });
-
-            // 2. CLEANUP: REMOVE EXPIRED OR INVALID TEMP TRIPS
-            data.trips.forEach((t:any) => {
-                if (t.isTemp && t.status !== 'Finalizada') {
-                    
-                    const activeSlot = activeSlots.find((s:any) => s.vaga === t.vaga);
-
-                    if (!activeSlot) {
-                        // Only remove if it's strictly the same operational date context
-                        if (t.date === getTodayDate() || t.date === currentOpDate) {
-                             db.ref('trips').child(t.id).remove();
-                        }
-                        return;
-                    }
-
-                    // Recalculate slot time to check expiration
-                    const [h, m] = activeSlot.time.split(':').map(Number);
-                    const [yOp, mOp, dOp] = currentOpDate.split('-').map(Number);
-                    const slotDate = new Date(yOp, mOp - 1, dOp, h, m, 0);
-                    
-                    if (h < 5) slotDate.setDate(slotDate.getDate() + 1);
-                    
-                    const diff = (now.getTime() - slotDate.getTime()) / 60000;
-                    
-                    // Expiration: Delete exactly after 45 minutes OR if time is invalid (< 0)
-                    if (diff > 45 || diff < 0) {
-                        db.ref('trips').child(t.id).remove();
-                    } else {
-                        // Update trip time if slot time changed (keeps it sync with +60 rule)
-                        const correctTripTime = addMinutes(activeSlot.time, 60);
-                        if (t.time !== correctTripTime) {
-                             db.ref('trips').child(t.id).update({ time: correctTripTime });
-                        }
-                    }
-                }
-            });
+        return () => {
+            unsubs.forEach(fn => fn());
+            tripsRef.off('value', tripsCb);
         };
+    }, [user, isFireConnected]);
 
-        manageTempTrips();
+    // --- MISSING HANDLERS IMPLEMENTATION ---
 
-    }, [uiTicker, data.trips, tableStatus, lousaOrder, spList, data.drivers, currentOpDate, rotationBaseDate]);
-
-    // ... (rest of the file remains unchanged)
-    
-    // Função de Tour Restart / Complete
-    const restartTour = () => { 
-        setTourStep(0); 
-        setView('dashboard'); 
-        setRunTour(true); 
-        if(user) localStorage.removeItem(`tour_seen_${user.username}`);
-    };
-
-    const completeTour = () => {
-        setRunTour(false);
-        setTourStep(0);
-        setView('dashboard');
-        if(user) localStorage.setItem(`tour_seen_${user.username}`, 'true');
+    const handleGlobalTouchStart = (e: any) => { globalTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; };
+    const handleGlobalTouchEnd = (e: any) => { 
+        const endX = e.changedTouches[0].clientX;
+        const diffX = endX - globalTouchRef.current.x;
+        if (diffX > 100 && !menuOpen) setMenuOpen(true);
+        if (diffX < -100 && menuOpen) setMenuOpen(false);
     };
     
-    const saveApiKey = (k: string) => { setGeminiKey(k); localStorage.setItem('nexflow_gemini_key', k); notify("API Key salva!", "success"); };
-    const blockIp = () => { if(!ipToBlock) return notify('Digite um IP', 'error'); dbOp('create', 'blocked_ips', { ip: ipToBlock, reason: ipReason || 'Manual', blockedBy: user.username }); setIpToBlock(''); setIpReason(''); notify('IP Bloqueado!', "success"); };
-    const saveIpLabel = (ip: string, label: string) => { if(!ip) return; const safeIp = ip.replace(/\./g, '_'); db.ref(`ip_labels/${safeIp}`).set(label); };
-    
-    const del = (col: string, id: string) => {
-        if (col === 'trips') {
-            const trip = data.trips.find((t:any) => t.id === id);
-            
-            if (trip) {
-                // Mensagem personalizada baseada no status
-                const msg = trip.status === 'Finalizada' 
-                    ? 'Os passageiros voltarão para a lista de Agendamentos (Pendentes).' 
-                    : 'Tem certeza que deseja excluir esta viagem?';
-
-                requestConfirm('Excluir viagem?', msg, () => {
-                    // 1. Libera passageiros se a viagem foi finalizada (volta para pendente)
-                    if (trip.status === 'Finalizada' && trip.passengerIds && Array.isArray(trip.passengerIds)) {
-                        trip.passengerIds.forEach((pid:string) => {
-                            db.ref(`passengers/${pid}`).update({ 
-                                time: trip.time, 
-                                date: trip.date 
-                            });
-                        });
-                    }
-
-                    // 2. Limpa dados da Madrugada na Tabela (CORREÇÃO SOLICITADA)
-                    // Zera horário e quantidade independentemente do status da viagem
-                    if (trip.isMadrugada) { 
-                        const sp = spList.find((s:any) => s.name === trip.driverName); 
-                        if (sp) {
-                            db.ref(`daily_tables/${trip.date}/madrugada/${sp.vaga}`).update({ time: null, qtd: null }); 
-                        }
-                    }
-
-                    // 3. Deleta a viagem
-                    dbOp('delete', col, id);
-                });
-                return;
-            }
-        }
-        requestConfirm('Excluir item?', 'Tem certeza que deseja remover este item permanentemente?', () => dbOp('delete', col, id));
+    const handleMenuDragStart = (e: any, index: number) => { setDraggedMenuIndex(index); e.dataTransfer.effectAllowed = "move"; };
+    const handleMenuDragOver = (e: any) => { e.preventDefault(); };
+    const handleMenuDrop = (e: any, dropIndex: number) => {
+        if (draggedMenuIndex === null) return;
+        const newOrder = [...orderedMenuItems];
+        const [moved] = newOrder.splice(draggedMenuIndex, 1);
+        newOrder.splice(dropIndex, 0, moved);
+        setOrderedMenuItems(newOrder);
+        setDraggedMenuIndex(null);
+        dbOp('update', 'preferences', { menuOrder: newOrder.map(i => i.id) });
     };
 
-    const saveDriverName = (vaga: string) => { if(!tempName.trim()) return; const newList = spList.map((d:any) => d.vaga === vaga ? { ...d, name: tempName } : d); db.ref('drivers_table_list').set(newList); setEditName(null); notify("Nome salvo!", "success"); };
+    const del = (node: string, id: string) => { requestConfirm("Excluir item?", "Essa ação não pode ser desfeita.", () => { dbOp('delete', node, id); }); };
     
-    const addCannedMessage = () => { const newMsg = { id: generateUniqueId(), title: 'Nova Mensagem', text: '' }; const newList = [...cannedMessages, newMsg]; db.ref('canned_messages_config/list').set(newList); };
-    const updateCannedMessage = (id:string, field:string, value:any) => { const newList = cannedMessages.map((m:any) => m.id === id ? { ...m, [field]: value } : m); db.ref('canned_messages_config/list').set(newList); };
-    const deleteCannedMessage = (id:string) => { requestConfirm('Excluir mensagem?', 'Esta mensagem será removida da lista.', () => { const newList = cannedMessages.filter((m:any) => m.id !== id); db.ref('canned_messages_config/list').set(newList); }); };
-    const handleCannedDragStart = (e:any, index:number) => { e.dataTransfer.setData("cannedIndex", index); };
-    const handleCannedDrop = (e:any, dropIndex:number) => { const dragIndex = parseInt(e.dataTransfer.getData("cannedIndex")); if (isNaN(dragIndex) || dragIndex === dropIndex) return; const newList = [...cannedMessages]; const [removed] = newList.splice(dragIndex, 1); newList.splice(dropIndex, 0, removed); db.ref('canned_messages_config/list').set(newList); };
-
-    // FUNÇÕES DE D&D PARA A TABELA GERAL (COM PROPAGAÇÃO)
-    const handleGeneralDragStart = (e: any, index: number) => {
-        setDraggedItem({ index, listType: 'geral' });
-    };
-
-    const handleGeneralDrop = (e: any, dropIndex: number) => {
-        if (!draggedItem || draggedItem.listType !== 'geral') return;
-        const dragIndex = draggedItem.index;
-        if (dragIndex === dropIndex) return;
-        let currentList = getRotatedList(currentOpDate);
-        const newList = [...currentList];
-        const [removed] = newList.splice(dragIndex, 1);
-        newList.splice(dropIndex, 0, removed);
-        db.ref('drivers_table_list').set(newList);
-        db.ref('system_settings/rotation_base_date').set(currentOpDate);
-        if (data.trips && data.trips.length > 0) { const tempTripsToDelete = data.trips.filter((t:any) => t.isTemp && t.date === currentOpDate); tempTripsToDelete.forEach((t:any) => { db.ref(`trips/${t.id}`).remove(); }); }
-        setDraggedItem(null);
+    const save = (type: string) => {
+        if (type === 'passengers' && !formData.name) return notify("Nome obrigatório", "error");
+        if (type === 'drivers' && !formData.name) return notify("Nome obrigatório", "error");
+        if (type === 'lostFound' && !formData.description) return notify("Descrição obrigatória", "error");
+        dbOp(formData.id ? 'update' : 'create', type, formData);
+        setModal(null);
+        setFormData({});
     };
 
     const saveExtraCharge = () => {
-        if (!formData.value || !formData.date) return notify("Valor e Data são obrigatórios.", "error");
-        
-        // Garante ID Sequencial
-        const nextId = generateNextTripId();
-
-        const payload = {
-            id: formData.id || nextId,
-            isExtra: true,
-            driverName: 'Carro Extra',
-            extraPhone: formData.phone,
-            value: formData.value,
-            date: formData.date,
-            time: '12:00',
-            notes: formData.notes,
-            paymentStatus: 'Pendente',
-            status: 'Finalizada',
-            pCount: 0
-        };
-        dbOp(payload.id ? 'update' : 'create', 'trips', payload);
+        if(!formData.value) return notify("Valor obrigatório", "error");
+        const payload = { ...formData, isExtra: true, status: 'Finalizada', driverName: 'Extra / Externo', paymentStatus: 'Pendente' };
+        dbOp('create', 'trips', payload);
         setModal(null);
+        setFormData({});
     };
 
-    const save = async (collection: string) => {
-        try {
-            if (collection === 'passengers') {
-                if (!formData.name || !formData.neighborhood) return notify("Nome e Bairro obrigatórios", "error");
-                const payload = { ...formData, date: formData.date || getTodayDate() };
-                await dbOp(formData.id ? 'update' : 'create', 'passengers', payload);
-            } else if (collection === 'drivers') {
-                if (!formData.name) return notify("Nome obrigatório", "error");
-                await dbOp(formData.id ? 'update' : 'create', 'drivers', formData);
-            } else if (collection === 'lostFound') {
-                if (!formData.description) return notify("Descrição obrigatória", "error");
-                await dbOp(formData.id ? 'update' : 'create', 'lostFound', formData);
-            }
-            setModal(null);
-            setFormData({});
-        } catch (e: any) {
-            notify("Erro ao salvar: " + e.message, "error");
-        }
+    const openEditTrip = (trip: any) => {
+        const dr = data.drivers.find((d:any)=>d.id===trip.driverId); 
+        setFormData({ ...trip });
+        setEditingTripId(trip.id);
+        setModal('trip');
+        let pax = trip.passengersSnapshot || [];
+        if(!pax.length && trip.passengerIds) pax = data.passengers.filter((p:any) => trip.passengerIds.includes(p.id));
+        setSuggestedTrip({
+            driver: dr || {name: trip.driverName || 'Desconhecido', capacity: 0},
+            time: trip.time,
+            date: trip.date,
+            passengers: pax,
+            occupancy: pax.reduce((a:any,b:any)=>a+(parseInt(b.passengerCount)||1), 0)
+        });
     };
 
-    const handleSmartCreate = async () => {
-        if(!aiInput.trim()) return notify("Diga algo!", "error");
-        if(!geminiKey) return notify("Configure a API Key nas configurações para usar o Cadastro Mágico.", "error");
-        setAiLoading(true);
-        try {
-            const bairros = BAIRROS.join(',');
-            const prompt = `Analise este texto: "${aiInput}". Extraia um JSON ESTRITAMENTE VÁLIDO (sem markdown, sem crases) com: name, phone, neighborhood (escolha o mais próximo de: ${bairros}), address, reference, passengerCount (número, padrão 1), luggageCount (número de malas, padrão 0), payment (Escolha EXATAMENTE um: "Dinheiro", "Pix" ou "Cartão"), time (HH:mm). Se faltar info, use null. Exemplo de saída: {"name": "João", ...}`;
-            
-            const res = await callGemini(prompt, geminiKey);
-            
-            if (!res) throw new Error("A IA não retornou nada. Verifique sua chave API.");
-
-            const cleanJson = res.replace(/```json/g, '').replace(/```/g, '').trim();
-            const json = JSON.parse(cleanJson);
-
-            const validPayments = ['Dinheiro', 'Pix', 'Cartão'];
-            let finalPayment = 'Dinheiro';
-            
-            if (json.payment) {
-                const found = validPayments.find(p => p.toLowerCase() === json.payment.toLowerCase());
-                if (found) finalPayment = found;
-            }
-
-            setFormData({
-                ...json,
-                payment: finalPayment, 
-                luggageCount: json.luggageCount || 0, 
-                status: 'Ativo', 
-                date: getTodayDate()
-            });
-            
-            setAiModal(false); 
-            setModal('passenger'); 
-            setAiInput('');
-        } catch(e: any) { 
-            notify("Erro IA: " + e.message, "error"); 
-            console.error(e); 
-        }
-        finally { setAiLoading(false); }
+    const updateTripStatus = (id: string, status: string) => { dbOp('update', 'trips', { id, status }); };
+    const duplicateTrip = (t: any) => {
+        const newTrip = { ...t, id: null, date: getTodayDate(), status: 'Ativo', paymentStatus: 'Pendente' };
+        delete newTrip.passengersSnapshot; 
+        delete newTrip.pCountSnapshot;
+        requestConfirm("Duplicar Viagem?", "Uma nova viagem será criada para hoje com os mesmos dados.", () => { dbOp('create', 'trips', newTrip); }, 'info');
     };
 
     const toggleMic = () => {
-        // @ts-ignore
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return notify("Seu navegador não suporta reconhecimento de voz.", "error");
-        if (isListening) { if (timerRef.current) timerRef.current.stop(); setIsListening(false); return; }
+        if (isListening) { setIsListening(false); return; }
+        setIsListening(true);
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (!SpeechRecognition) return notify("Navegador sem suporte a voz.", "error");
         const recognition = new SpeechRecognition();
-        recognition.lang = 'pt-BR'; recognition.continuous = false; recognition.interimResults = false;
-        recognition.onstart = () => setIsListening(true);
-        recognition.onresult = (e:any) => { setAiInput((prev:string) => (prev ? prev + ' ' : '') + e.results[0][0].transcript); setIsListening(false); };
-        recognition.onerror = (e:any) => { console.error("Erro voz:", e); setIsListening(false); };
-        recognition.onend = () => setIsListening(false);
-        recognition.start(); timerRef.current = recognition;
+        recognition.lang = 'pt-BR';
+        recognition.onresult = (event: any) => {
+            const transcript = event.results[0][0].transcript;
+            setAiInput((prev: string) => prev + (prev ? ' ' : '') + transcript);
+            setIsListening(false);
+        };
+        recognition.start();
     };
 
-    const simulate = () => {
-        if (!formData.driverId) return notify("Selecione um motorista", "error");
-        
-        const dr = data.drivers.find((d:any) => d.id === formData.driverId);
-        const driverCapacity = dr && dr.capacity ? parseInt(dr.capacity, 10) : 15;
-
-        if (formData.isMadrugada) {
-             setSuggestedTrip({ driver: dr || { name: 'Desconhecido', capacity: 15 }, time: formData.time, passengers: [], occupancy: 0, date: formData.date || getTodayDate() });
-             return;
-        }
-        
-        const time = formData.time;
-        if (!time) return notify("Selecione um horário", "error");
-
-        let tripDate = formData.date || getTodayDate();
-        let tripTime = time;
-
-        // 0. Identificar passageiros já alocados neste dia
-        const occupiedPaxIds = new Set();
-        data.trips.forEach((t:any) => {
-            if (t.date === tripDate && t.status !== 'Cancelada') {
-                if (t.passengerIds && Array.isArray(t.passengerIds)) {
-                    t.passengerIds.forEach((pid:string) => occupiedPaxIds.add(pid));
+    const handleSmartCreate = async () => {
+        if (!aiInput) return;
+        setAiLoading(true);
+        try {
+            const prompt = `Analise o texto: "${aiInput}". Retorne um JSON com: action (passenger_create, trip_create), data (objeto com campos). Se passenger_create: name, neighborhood (padronize com: ${BAIRROS.join(', ')}), time, date (YYYY-MM-DD), payment, passengerCount. Use hoje como ${getTodayDate()}.`;
+            const res = await callGemini(prompt, geminiKey);
+            const jsonMatch = res.match(/\{[\s\S]*\}/);
+            if(jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.action === 'passenger_create') {
+                    dbOp('create', 'passengers', { ...parsed.data, status: 'Ativo' });
+                    setAiModal(false);
+                    setAiInput('');
                 }
             }
-        });
-
-        // 1. Filtrar Candidatos
-        const candidates = data.passengers.filter((p:any) => {
-            return p.status === 'Ativo' && 
-                   p.date === tripDate && 
-                   p.time === tripTime &&
-                   !occupiedPaxIds.has(p.id); // FILTRO NOVO
-        });
-
-        if (candidates.length === 0) return notify("Nenhum passageiro disponível para este horário.", "info");
-
-        // 2. Encontrar a "Âncora" (Foco da rota)
-        // Lógica: A maior família (passengerCount). Desempate pelo início da cidade.
-        const anchor = [...candidates].sort((a:any, b:any) => {
-            const countA = parseInt(a.passengerCount || 1);
-            const countB = parseInt(b.passengerCount || 1);
-            if (countB !== countA) return countB - countA; // Maior grupo primeiro
-            return getBairroIdx(a.neighborhood) - getBairroIdx(b.neighborhood); // Menor índice geográfico
-        })[0];
-
-        const anchorIdx = getBairroIdx(anchor.neighborhood);
-
-        // 3. Ordenar candidatos baseado na proximidade da Âncora
-        // Critérios: Mesmo endereço > Mesmo Bairro > Bairro Vizinho > Tamanho do grupo
-        candidates.sort((a:any, b:any) => {
-            // Prioridade 1: Mesmo Endereço Exato
-            const sameAddrA = a.address && anchor.address && a.address.trim().toLowerCase() === anchor.address.trim().toLowerCase();
-            const sameAddrB = b.address && anchor.address && b.address.trim().toLowerCase() === anchor.address.trim().toLowerCase();
-            
-            if (sameAddrA && !sameAddrB) return -1;
-            if (!sameAddrA && sameAddrB) return 1;
-
-            // Prioridade 2: Proximidade do Bairro (Diferença de índice)
-            const idxA = getBairroIdx(a.neighborhood);
-            const idxB = getBairroIdx(b.neighborhood);
-            const distA = Math.abs(idxA - anchorIdx);
-            const distB = Math.abs(idxB - anchorIdx);
-
-            if (distA !== distB) return distA - distB; // Quanto menor a distância, melhor
-
-            // Prioridade 3: Tamanho do grupo (Maiores primeiro para encher logo)
-            const countA = parseInt(a.passengerCount || 1);
-            const countB = parseInt(b.passengerCount || 1);
-            return countB - countA;
-        });
-
-        // 4. Preencher a Van (Bucket Fill)
-        const selectedPassengers = [];
-        let currentOccupancy = 0;
-
-        for (const pax of candidates) {
-            const pCount = parseInt(pax.passengerCount || 1, 10);
-            if (currentOccupancy + pCount <= driverCapacity) {
-                selectedPassengers.push(pax);
-                currentOccupancy += pCount;
-            }
-        }
-
-        setSuggestedTrip({
-            driver: dr,
-            time: tripTime,
-            passengers: selectedPassengers,
-            occupancy: currentOccupancy,
-            date: tripDate
-        });
-        
-        if (selectedPassengers.length < candidates.length) {
-            notify(`Limite de ${driverCapacity} lugares atingido. Priorizando rota da maior família.`, "info");
-        } else if (selectedPassengers.length > 0) {
-            notify(`${selectedPassengers.length} grupos adicionados.`, "success");
-        }
-    };
-    
-    const addById = () => {
-        if (!searchId || !suggestedTrip) return;
-        const p = data.passengers.find((x:any) => x.id === searchId);
-        if (!p) return notify("Passageiro não encontrado", "error");
-        if (suggestedTrip.passengers.some((x:any) => x.id === p.id)) return notify("Já está na lista atual", "info");
-        
-        const paxCount = parseInt(p.passengerCount || 1, 10);
-        const currentCap = suggestedTrip.driver.capacity ? parseInt(suggestedTrip.driver.capacity, 10) : 15;
-
-        // Check overlap
-        const isOccupied = data.trips.some((t:any) => 
-            t.date === suggestedTrip.date && 
-            t.status !== 'Cancelada' && 
-            t.passengerIds && 
-            t.passengerIds.includes(p.id)
-        );
-
-        if (isOccupied) return notify(`Passageiro já está em outra viagem no dia ${formatDisplayDate(suggestedTrip.date)}!`, "error");
-        
-        if (suggestedTrip.occupancy + paxCount > currentCap) {
-            return notify(`Capacidade excedida! Restam ${currentCap - suggestedTrip.occupancy} lugares.`, "error");
-        }
-
-        const newPax = [...suggestedTrip.passengers, p].sort((a,b)=>getBairroIdx(a.neighborhood)-getBairroIdx(b.neighborhood));
-        const newOcc = suggestedTrip.occupancy + paxCount;
-        
-        setSuggestedTrip({ ...suggestedTrip, passengers: newPax, occupancy: newOcc });
-        setSearchId('');
-    };
-    
-    const autoFill = () => { simulate(); };
-    
-    const removePax = (pid: string) => {
-        if (!suggestedTrip) return;
-        const newPax = suggestedTrip.passengers.filter((p:any) => p.id !== pid);
-        const newOcc = suggestedTrip.occupancy - parseInt(suggestedTrip.passengers.find((x:any)=>x.id===pid)?.passengerCount || 1);
-        setSuggestedTrip({ ...suggestedTrip, passengers: newPax, occupancy: newOcc });
-    };
-    
-    const confirmTrip = () => {
-        if (!suggestedTrip) return;
-        
-        let tripId = editingTripId;
-        
-        // Se for nova viagem (não edição), gera ID sequencial
-        if (!tripId) {
-            tripId = generateNextTripId();
-        }
-
-        const finalTime = formData.time || suggestedTrip.time;
-        if (!finalTime) return notify("Horário é obrigatório.", "error");
-
-        const finalDate = formData.date || suggestedTrip.date || getTodayDate();
-
-        // 1. Prepara lista de passageiros para salvar (Independente se é Madrugada ou não)
-        // Isso corrige o problema de duplicidade, pois o addById checa se o passageiro já existe em passengerIds
-        const passengerIdsToSave = suggestedTrip.passengers.map((p:any) => p.id);
-        const passengersSnapshotToSave = suggestedTrip.passengers;
-
-        const payload: any = {
-            id: tripId,
-            driverId: suggestedTrip.driver.id,
-            driverName: suggestedTrip.driver.name,
-            date: finalDate,
-            time: finalTime,
-            status: 'Em andamento',
-            isMadrugada: !!formData.isMadrugada, 
-            isTemp: false,
-            passengerIds: passengerIdsToSave,
-            passengersSnapshot: passengersSnapshotToSave
-        };
-
-        if (formData.isMadrugada) {
-             const sp = spList.find((s:any) => s.name === suggestedTrip.driver.name);
-             if (sp) {
-                 db.ref(`daily_tables/${finalDate}/madrugada/${sp.vaga}`).update({
-                     time: finalTime,
-                     qtd: suggestedTrip.occupancy || 0
-                 });
-                 payload.vaga = sp.vaga;
-                 payload.pCountSnapshot = suggestedTrip.occupancy || 0;
-             }
-        } 
-        
-        // Atualiza status do passageiro no banco (histórico de última viagem)
-        suggestedTrip.passengers.forEach((p:any) => {
-            db.ref(`passengers/${p.id}`).update({ time: finalTime, date: finalDate });
-        });
-        
-        payload.ticketPrice = pricePerPassenger;
-
-        dbOp(editingTripId ? 'update' : 'create', 'trips', payload);
-        
-        setModal(null);
-        setSuggestedTrip(null);
-        setEditingTripId(null);
-    };
-    
-    const openEditTrip = (t:any) => {
-        const dr = data.drivers.find((d:any)=>d.id===t.driverId); 
-        let pax = []; let occ = 0;
-        
-        // Tenta carregar passageiros reais primeiro (Snapshot ou Live ID)
-        if (t.passengersSnapshot && t.passengersSnapshot.length > 0) {
-            pax = t.passengersSnapshot;
-            occ = pax.reduce((a:any,b:any)=>a+parseInt(b.passengerCount||1),0);
-        } else if (t.passengerIds && t.passengerIds.length > 0) {
-            pax = data.passengers.filter((p:any)=>(t.passengerIds||[]).includes(p.id));
-            occ = pax.reduce((a:any,b:any)=>a+parseInt(b.passengerCount||1),0);
-        } else if (t.isMadrugada && (t.pCountSnapshot || t.pCount)) {
-            // Fallback APENAS se não houver registro de passageiros reais (Legado)
-            occ = parseInt(t.pCountSnapshot || t.pCount || 0); 
-            for(let i=0; i<occ; i++) pax.push({ id: `dummy_${i}`, name: 'Passageiro Madrugada', neighborhood: 'Madrugada', passengerCount: 1 });
-        }
-        
-        setFormData({ 
-            driverId: t.driverId, 
-            time: t.time, 
-            date: t.date, 
-            isMadrugada: !!t.isMadrugada 
-        }); 
-        
-        setEditingTripId(t.id);
-        setSuggestedTrip({ 
-            driver: dr || {name: t.driverName || 'Desconhecido', capacity: 0}, 
-            time: t.time, 
-            passengers: pax, 
-            occupancy: occ, 
-            date: t.date 
-        });
-        setModal('trip');
-    };
-    
-    const updateTripStatus = (id: string, status: string) => {
-        dbOp('update', 'trips', { id, status });
-        const trip = data.trips.find((t:any) => t.id === id);
-        if (trip && status === 'Finalizada') {
-            if (!trip.passengersSnapshot && trip.passengerIds) {
-                const pax = data.passengers.filter((p:any) => trip.passengerIds.includes(p.id));
-                db.ref(`trips/${id}`).update({ passengersSnapshot: pax });
-            }
-        }
+        } catch (e) { notify("Erro na IA", "error"); } finally { setAiLoading(false); }
     };
 
-    const duplicateTrip = (t: any) => {
-        // Garante ID Sequencial
-        const newId = generateNextTripId();
-        
-        const newTrip = {
-            ...t,
-            id: newId, 
-            date: getTodayDate(),
-            status: 'Em andamento',
-            passengerIds: t.passengerIds || [],
-            passengersSnapshot: null,
-            pCountSnapshot: null,
-            isMadrugada: !!t.isMadrugada, // FIX: Force boolean
-            isTemp: false
-        };
-        
-        // CLEANUP: Ensure no undefined values
-        Object.keys(newTrip).forEach(key => newTrip[key] === undefined && delete newTrip[key]);
-        
-        delete newTrip.createdAt;
-        dbOp('create', 'trips', newTrip);
-        notify('Viagem duplicada para hoje!', 'success');
+    const getRotatedList = (dateStr: string) => {
+        if (!spList.length) return [];
+        const base = new Date(rotationBaseDate + 'T00:00:00');
+        const current = new Date(dateStr + 'T00:00:00');
+        const diffTime = current.getTime() - base.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        const shift = diffDays % spList.length;
+        if (shift === 0) return spList;
+        return [...spList.slice(shift), ...spList.slice(0, shift)];
+    };
+    
+    const getRotatedMadrugadaList = (dateStr: string) => { return spList.filter((d:any) => madrugadaList.includes(d.vaga)); };
+
+    const saveDriverName = (vaga: string) => {
+         const newList = spList.map((d:any) => d.vaga === vaga ? { ...d, name: tempName } : d);
+         dbOp('update', 'drivers_table_list', newList); 
+         setEditName(null);
     };
 
     const updateTableStatus = (vaga: string, status: string | null) => {
-        const newStatus = { ...tableStatus };
-        if (status) newStatus[vaga] = status; else delete newStatus[vaga];
-        let newLousa = [...lousaOrder];
-        if (status === 'lousa') {
-            const exists = newLousa.some((i:any) => i.vaga === vaga);
-            if (!exists) newLousa.push({ vaga, uid: generateUniqueId(), riscado: false });
-        } else if (status === 'confirmed') {
-            newLousa = newLousa.filter((i:any) => i.vaga !== vaga);
-        } else {
-            newLousa = newLousa.filter((i:any) => i.vaga !== vaga);
-        }
-        db.ref(`daily_tables/${currentOpDate}`).update({ status: newStatus, lousaOrder: newLousa });
+        if (status === null) db?.ref(`daily_tables/${analysisDate}/status/${vaga}`).remove();
+        else dbOp('update', `daily_tables/${analysisDate}/status`, { [vaga]: status });
+    };
+
+    const confirmedTimes = useMemo(() => {
+        const map: any = {};
+        const activeTrips = data.trips.filter((t:any) => t.date === analysisDate && t.status !== 'Cancelada');
+        activeTrips.forEach((t:any) => {
+            const entry = spList.find((s:any) => s.name === t.driverName);
+            if(entry) map[entry.vaga] = t.time;
+        });
+        return map;
+    }, [data.trips, analysisDate, spList]);
+    
+    const isTimeExpired = (time: string) => {
+        if (!time) return false;
+        if (analysisDate !== getTodayDate()) return true;
+        const now = new Date();
+        const [h, m] = time.split(':').map(Number);
+        const tDate = new Date(); tDate.setHours(h); tDate.setMinutes(m);
+        return now > tDate;
     };
 
     const sendToLousaKeepConfirmed = (vaga: string) => {
-        let newLousa = [...lousaOrder];
-        const exists = newLousa.some((i:any) => i.vaga === vaga);
-        if (!exists) {
-            newLousa.push({ vaga, uid: generateUniqueId(), riscado: false });
-            db.ref(`daily_tables/${lousaDate}/lousaOrder`).set(newLousa);
-            notify("Adicionado à lousa!", "success");
-        }
+        const item = { vaga, uid: generateUniqueId(), riscado: false };
+        const newList = [...lousaOrder, item];
+        dbOp('update', `daily_tables/${lousaDate}`, { lousaOrder: newList });
     };
 
-    const removeTempTrip = (vaga: string) => {
-        const driverSp = spList.find((d:any) => d.vaga === vaga);
-        if (!driverSp) return;
-        const trip = data.trips.find((t:any) => 
-            t.isTemp && 
-            t.date === getTodayDate() && 
-            (t.driverName === driverSp.name || t.vaga === vaga)
-        );
-        if (trip) db.ref(`trips/${trip.id}`).remove();
+    const handleLousaAction = (uid: string, action: string, vaga: string) => {
+        let newList = [...lousaOrder];
+        if (action === 'remove') newList = newList.filter(i => i.uid !== uid);
+        if (action === 'remove_all') newList = newList.filter(i => i.vaga !== vaga);
+        if (action === 'riscar') newList = newList.map(i => i.uid === uid ? { ...i, riscado: !i.riscado } : i);
+        if (action === 'baixar') newList = newList.map(i => i.uid === uid ? { ...i, baixou: !i.baixou } : i);
+        if (action === 'duplicate') {
+             const idx = newList.findIndex(i => i.uid === uid);
+             const item = newList[idx];
+             newList.splice(idx + 1, 0, { ...item, uid: generateUniqueId() });
+        }
+        dbOp('update', `daily_tables/${lousaDate}`, { lousaOrder: newList });
     };
 
     const addNullLousaItem = () => {
-        const newItem = { vaga: 'NULL', uid: generateUniqueId(), riscado: false, isNull: true };
-        const newOrder = [...lousaOrder, newItem];
-        db.ref(`daily_tables/${lousaDate}/lousaOrder`).set(newOrder);
+         const newList = [...lousaOrder, { vaga: 'NULL', uid: generateUniqueId(), isNull: true }];
+         dbOp('update', `daily_tables/${lousaDate}`, { lousaOrder: newList });
     };
 
-    const handleLousaAction = (uid: string | null, action: string, vagaRef: string | null = null) => {
-        let newLousa = [...lousaOrder];
-        const itemIndex = newLousa.findIndex((i:any) => i.uid === uid);
-        if (itemIndex === -1 && action !== 'duplicate' && action !== 'remove_all') return;
-        if (itemIndex > -1) newLousa[itemIndex] = { ...newLousa[itemIndex] };
+    const startLousaTime = new Date(); startLousaTime.setHours(4,0,0,0); 
 
-        if (action === 'riscar') {
-            const newRiscadoState = !newLousa[itemIndex].riscado;
-            newLousa[itemIndex].riscado = newRiscadoState;
-        } else if (action === 'remove') {
-            const itemToRemove = newLousa[itemIndex];
-            if(itemToRemove) removeTempTrip(itemToRemove.vaga);
-            newLousa.splice(itemIndex, 1);
-            const vRef = vagaRef || itemToRemove?.vaga;
-            if (vRef) {
-                const stillExists = newLousa.some((i:any) => i.vaga === vRef);
-                if (!stillExists) db.ref(`daily_tables/${currentOpDate}/status/${vRef}`).remove();
-            }
-        } else if (action === 'remove_all') {
-            if (vagaRef) {
-                removeTempTrip(vagaRef);
-                newLousa = newLousa.filter((i:any) => i.vaga !== vagaRef);
-                db.ref(`daily_tables/${currentOpDate}/status/${vagaRef}`).remove();
-            }
-        } else if (action === 'duplicate') {
-            if (itemIndex > -1) {
-                const original = newLousa[itemIndex];
-                newLousa.push({ vaga: original.vaga, uid: generateUniqueId(), riscado: false });
-            } else if (vagaRef) {
-                 newLousa.push({ vaga: vagaRef, uid: generateUniqueId(), riscado: false });
-            }
-        } else if (action === 'baixar') {
-            // Marca como baixou (não conta mais no horário)
-            newLousa[itemIndex].baixou = true;
-            // Remove a viagem temporária que estava "pendurada" nessa vaga
-            removeTempTrip(newLousa[itemIndex].vaga);
-            // Cria uma nova entrada limpa no final da fila
-            newLousa.push({ vaga: newLousa[itemIndex].vaga, uid: generateUniqueId(), riscado: false });
-            newLousa.push({ vaga: newLousa[itemIndex].vaga, uid: generateUniqueId(), riscado: false });
-        }
-        
-        db.ref(`daily_tables/${lousaDate}/lousaOrder`).set(newLousa);
-    };
-
-    const handleDragStart = (e: any, index: number) => {
-        setDraggedItem({ index, listType: 'lousa' });
-    };
-
+    const handleDragStart = (e: any, index: number) => { setDraggedItem({ index, listType: 'lousa' }); };
     const handleDrop = (e: any, dropIndex: number) => {
         if (!draggedItem || draggedItem.listType !== 'lousa') return;
-        const dragIndex = draggedItem.index;
-        if (dragIndex === dropIndex) return;
-        
-        const newOrder = [...lousaOrder];
-        const [removed] = newOrder.splice(dragIndex, 1);
-        newOrder.splice(dropIndex, 0, removed);
-        
-        db.ref(`daily_tables/${lousaDate}/lousaOrder`).set(newOrder);
+        const newList = [...lousaOrder];
+        const [moved] = newList.splice(draggedItem.index, 1);
+        newList.splice(dropIndex, 0, moved);
+        setLousaOrder(newList); 
+        dbOp('update', `daily_tables/${lousaDate}`, { lousaOrder: newList });
+        setDraggedItem(null);
+    };
+    
+    const handleGeneralDragStart = (e: any, index: number) => { setDraggedItem({ index, listType: 'geral' }); };
+    const handleGeneralDrop = (e: any, dropIndex: number) => {
+        if (!draggedItem || draggedItem.listType !== 'geral') return;
+        const newList = [...getRotatedList(currentOpDate)];
+        const [moved] = newList.splice(draggedItem.index, 1);
+        newList.splice(dropIndex, 0, moved);
+        dbOp('update', 'drivers_table_list', newList);
         setDraggedItem(null);
     };
 
-    const addMadrugadaVaga = () => {
-        setTempVagaMadrugada('');
-        setModal('madrugadaVaga');
-    };
-
+    const addMadrugadaVaga = () => { setModal('madrugadaVaga'); };
     const confirmAddMadrugadaVaga = () => {
-        if (!tempVagaMadrugada) return;
-        if (!madrugadaList.includes(tempVagaMadrugada)) {
+        if (tempVagaMadrugada) {
             const newList = [...madrugadaList, tempVagaMadrugada];
-            db.ref('madrugada_config/list').set(newList);
-            notify("Vaga adicionada!", "success");
+            dbOp('update', 'madrugada_config/list', newList);
+            setModal(null);
+            setTempVagaMadrugada('');
         }
-        setModal(null);
     };
-
-    const removeMadrugadaVaga = (vaga: string) => {
-        requestConfirm("Remover esta vaga da madrugada?", "Ela sairá da lista da madrugada permanentemente.", () => {
-            const newList = madrugadaList.filter((v: string) => v !== vaga);
-            db.ref('madrugada_config/list').set(newList);
-        });
-    };
-
+    const removeMadrugadaVaga = (vaga: string) => { dbOp('update', 'madrugada_config/list', madrugadaList.filter((v:string) => v !== vaga)); };
     const toggleMadrugadaRiscado = (vaga: string) => {
-        const currentData = madrugadaData[vaga] || {};
-        if (currentData.riscado) {
-             db.ref(`daily_tables/${currentOpDate}/madrugada/${vaga}`).update({ riscado: false, comment: null });
-        } else {
-            setVagaToBlock(vaga);
-            setTempJustification('');
-            setModal('madrugadaBlock');
-        }
+         const current = madrugadaData[vaga] || {};
+         if (!current.riscado) { setVagaToBlock(vaga); setModal('madrugadaBlock'); } 
+         else { dbOp('update', `daily_tables/${currentOpDate}/madrugada/${vaga}`, { ...current, riscado: false, comment: '' }); }
     };
-
     const confirmMadrugadaBlock = () => {
-        if (!vagaToBlock) return;
-        db.ref(`daily_tables/${currentOpDate}/madrugada/${vagaToBlock}`).update({ 
-            riscado: true, 
-            comment: tempJustification 
-        });
-        setModal(null);
-        setVagaToBlock(null);
+         if (vagaToBlock) {
+             const current = madrugadaData[vagaToBlock] || {};
+             dbOp('update', `daily_tables/${currentOpDate}/madrugada/${vagaToBlock}`, { ...current, riscado: true, comment: tempJustification });
+             setModal(null); setVagaToBlock(null); setTempJustification('');
+         }
+    };
+    const openMadrugadaTrip = (vaga: string, date: string) => {
+        const tripId = `mad_${date}_${vaga}`;
+        const existing = data.trips.find((t:any) => t.id === tripId);
+        if (existing) openEditTrip(existing);
+        else {
+             const sp = spList.find((s:any) => s.vaga === vaga);
+             setFormData({ id: tripId, driverId: sp ? data.drivers.find((d:any)=>d.name===sp.name)?.id : '', driverName: sp ? sp.name : '', vaga: vaga, date: date, time: '04:00/04:45', isMadrugada: true, pCount: 0 });
+             setModal('trip'); setSuggestedTrip(null);
+        }
+    };
+    
+    const handleMadrugadaDragStart = (e: any, index: number) => { setDraggedItem({ index, listType: 'madrugada' }); };
+    const handleMadrugadaDrop = (e: any, dropIndex: number) => {
+        if (!draggedItem || draggedItem.listType !== 'madrugada') return;
+        const newList = [...madrugadaList];
+        const [moved] = newList.splice(draggedItem.index, 1);
+        newList.splice(dropIndex, 0, moved);
+        dbOp('update', 'madrugada_config/list', newList);
+        setDraggedItem(null);
     };
 
-    const openMadrugadaTrip = (vaga: string, date: string) => {
-        const sp = spList.find((s:any) => s.vaga === vaga);
-        if (!sp) return notify("Vaga não encontrada na lista geral", "error");
-        
-        const driver = data.drivers.find((d:any) => d.name === sp.name);
-        
-        // BUSCA A VIAGEM PELOS ATRIBUTOS, NÃO PELO ID
-        const existingTrip = data.trips.find((t:any) => 
-            t.isMadrugada && 
-            t.date === date && 
-            t.vaga === vaga && 
-            t.status !== 'Cancelada' // Ignora canceladas para permitir recriar
-        );
-        
-        if (existingTrip) {
-            openEditTrip(existingTrip);
-        } else {
-            setFormData({ 
-                isMadrugada: true, 
-                driverId: driver ? driver.id : '', 
-                time: '', // Vazio para forçar a escolha no modal
-                date: date 
-            });
-            setSuggestedTrip(null); // Nulo para abrir o formulário de configuração, não o resumo
-            setEditingTripId(null);
-            setModal('trip');
-        }
+    const addCannedMessage = () => { dbOp('update', 'canned_messages_config/list', [...cannedMessages, { id: generateUniqueId(), title: 'Nova Mensagem', text: '' }]); };
+    const updateCannedMessage = (id: string, field: string, val: string) => { dbOp('update', 'canned_messages_config/list', cannedMessages.map((m:any) => m.id === id ? { ...m, [field]: val } : m)); };
+    const deleteCannedMessage = (id: string) => { dbOp('update', 'canned_messages_config/list', cannedMessages.filter((m:any) => m.id !== id)); };
+    const handleCannedDragStart = (e: any, index: number) => { setDraggedItem({ index, listType: 'canned' }); };
+    const handleCannedDrop = (e: any, dropIndex: number) => {
+         if (!draggedItem || draggedItem.listType !== 'canned') return;
+         const newList = [...cannedMessages];
+         const [moved] = newList.splice(draggedItem.index, 1);
+         newList.splice(dropIndex, 0, moved);
+         dbOp('update', 'canned_messages_config/list', newList);
+         setDraggedItem(null);
+    };
+
+    const handleTouchStart = (e: any, index: number, listType: string) => { setDraggedItem({ index, listType }); };
+    const handleTouchMove = (e: any) => { e.preventDefault(); };
+    const handleTouchEnd = (e: any, dropIndex: number, listType: string) => {
+         if (dropIndex !== -1 && draggedItem && draggedItem.listType === listType) {
+             if (listType === 'lousa') handleDrop(e, dropIndex);
+             if (listType === 'geral') handleGeneralDrop(e, dropIndex);
+             if (listType === 'madrugada') handleMadrugadaDrop(e, dropIndex);
+             if (listType === 'canned') handleCannedDrop(e, dropIndex);
+         }
+         setDraggedItem(null);
     };
 
     const sendBillingMessage = (trip: any) => {
-        const d = data.drivers.find((x:any) => x.id === trip.driverId);
-        if (!d || !d.phone) return notify("Motorista sem telefone", "error");
-        const msg = `Olá ${d.name}, referente à viagem #${trip.id} do dia ${formatDisplayDate(trip.date)} às ${trip.time}. Valor: R$ ${trip.value},00. Status: ${trip.isPaid ? 'PAGO' : 'PENDENTE'}.`;
-        window.open(`https://wa.me/55${d.phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
+         const d = data.drivers.find((x:any) => x.name === trip.driverName);
+         if (d && d.phone) {
+             const msg = encodeURIComponent(`Olá ${d.name}, favor verificar o pagamento da viagem #${trip.id} de ${formatDisplayDate(trip.date)}.`);
+             window.open(`https://wa.me/55${d.phone.replace(/\D/g,'')}?text=${msg}`, '_blank');
+         } else { notify("Motorista sem telefone", "error"); }
     };
 
-    const handleMadrugadaDragStart = (e:any, i:number) => e.dataTransfer.setData("madIndex", i);
+    const restartTour = () => { setRunTour(true); setTourStep(0); };
+    const completeTour = () => { setRunTour(false); localStorage.setItem(`tour_seen_${user.username}`, 'true'); };
+    const saveApiKey = (key: string) => { localStorage.setItem('nexflow_gemini_key', key); notify("Chave Salva!", "success"); };
+    const blockIp = (ip: string) => { /* logic */ };
+    const saveIpLabel = (ip: string, label: string) => { /* logic */ };
     
-    // CORREÇÃO: Lógica de Drag and Drop com Rodagem Automática
-    const handleMadrugadaDrop = (e:any, dropIndex:number) => { 
-        const dragIndex = parseInt(e.dataTransfer.getData("madIndex")); 
-        if (isNaN(dragIndex) || dragIndex === dropIndex) return; 
-        
-        // Usa a lista filtrada/rodada para identificar quem está sendo movido
-        // madrugadaOrderedList é derivada da currentRotatedList
-        const currentRotatedList = getRotatedList(currentOpDate);
-        const madrugadaOrderedList = currentRotatedList.filter((d:any) => madrugadaList.includes(d.vaga));
-
-        const draggedItem = madrugadaOrderedList[dragIndex];
-        const targetItem = madrugadaOrderedList[dropIndex];
-
-        if (!draggedItem || !targetItem) return;
-
-        // Precisamos encontrar os índices reais na lista MESTRA (spList)
-        // para trocar suas posições originais. Como a rodagem é cíclica,
-        // trocar na lista mestra troca na visualização rodada também.
-        const mainDragIdx = spList.findIndex((x:any) => x.vaga === draggedItem.vaga);
-        const mainDropIdx = spList.findIndex((x:any) => x.vaga === targetItem.vaga);
-
-        if (mainDragIdx === -1 || mainDropIdx === -1) return;
-
-        const newList = [...spList];
-        // Swap simples
-        const temp = newList[mainDragIdx];
-        newList[mainDragIdx] = newList[mainDropIdx];
-        newList[mainDropIdx] = temp;
-
-        db.ref('drivers_table_list').set(newList);
-        // Não resetamos a data base, pois queremos manter a rodagem fluida, apenas alterando a ordem relativa
+    const addById = () => {
+        const p = data.passengers.find((x:any) => x.id.toString() === searchId);
+        if (p) {
+             setSuggestedTrip((prev:any) => ({ ...prev, passengers: [...prev.passengers, p], occupancy: prev.occupancy + (parseInt(p.passengerCount)||1) }));
+             setSearchId('');
+        } else { notify("Passageiro não encontrado", "error"); }
     };
-
-    const handleGlobalTouchStart = (e:any) => { if(view==='table'||menuOpen)return; globalTouchRef.current={x:e.touches[0].clientX,y:e.touches[0].clientY}; };
-    const handleGlobalTouchEnd = (e:any) => { if(view==='table'||draggedItem||menuOpen)return; const dx=e.changedTouches[0].clientX-globalTouchRef.current.x; if(dx>80) setMenuOpen(true); };
-    const handleMenuDragStart = (e:any, i:number) => { setDraggedMenuIndex(i); e.dataTransfer.effectAllowed = "move"; };
-    const handleMenuDragOver = (e:any) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-    const handleMenuDrop = (e:any, i:number) => { e.preventDefault(); if (draggedMenuIndex === null || draggedMenuIndex === i) return; const newItems = [...orderedMenuItems]; const [movedItem] = newItems.splice(draggedMenuIndex, 1); newItems.splice(i, 0, movedItem); setOrderedMenuItems(newItems); setDraggedMenuIndex(null); if (user) { db.ref(`user_data/${user.username}/preferences/menuOrder`).set(newItems.map(i => i.id)); } };
-    const handleTouchStart = (e:any, i:number, t:string) => { touchStartPos.current={x:e.touches[0].clientX,y:e.touches[0].clientY}; timerRef.current=setTimeout(()=>{setDraggedItem({index:i,listType:t}); if(navigator.vibrate)navigator.vibrate(50);},800); };
-    const handleTouchMove = (e:any) => { if(!draggedItem && Math.abs(e.touches[0].clientX-touchStartPos.current.x)>5) clearTimeout(timerRef.current); };
-    const handleTouchEnd = (e:any) => { clearTimeout(timerRef.current); setDraggedItem(null); };
+    const autoFill = () => { notify("Auto-fill simulado.", "info"); };
+    const removePax = (id: string) => {
+        setSuggestedTrip((prev:any) => ({ ...prev, passengers: prev.passengers.filter((p:any) => p.id !== id), occupancy: prev.occupancy - (parseInt(prev.passengers.find((p:any)=>p.id===id)?.passengerCount)||1) }));
+    };
+    const confirmTrip = () => {
+         const newTrip: any = { // Explicitly typed as any to allow dynamic assignment of properties
+             driverId: formData.driverId || data.drivers.find((d:any)=>d.name===suggestedTrip.driver.name)?.id,
+             driverName: suggestedTrip.driver.name,
+             time: suggestedTrip.time,
+             date: suggestedTrip.date,
+             status: 'Ativo',
+             paymentStatus: 'Pendente',
+             passengerIds: suggestedTrip.passengers.map((p:any)=>p.id),
+             passengersSnapshot: suggestedTrip.passengers,
+             pCountSnapshot: suggestedTrip.occupancy,
+             isMadrugada: !!formData.isMadrugada
+         };
+         if (editingTripId) newTrip.id = editingTripId;
+         dbOp(editingTripId ? 'update' : 'create', 'trips', newTrip);
+         setModal(null); setSuggestedTrip(null); setEditingTripId(null);
+    };
+    const simulate = () => {
+        const dr = data.drivers.find((d:any)=>d.id === formData.driverId);
+        setSuggestedTrip({ driver: dr || { name: 'Simulado', capacity: 15 }, time: formData.time, date: formData.date || getTodayDate(), passengers: [], occupancy: 0 });
+    };
 
     if (isLoading) return <div id="loader" className="fixed inset-0 bg-black flex items-center justify-center"><div className="text-amber-500 font-bold">CARREGANDO...</div></div>;
     if (!isAuthenticated) return <LoginScreen />;
 
-    // ... (Main Render with updated props)
     return (
         <div className={`h-screen w-screen overflow-hidden ${theme.bg} ${theme.text} font-sans flex`} 
              onTouchStart={handleGlobalTouchStart} 
              onTouchEnd={handleGlobalTouchEnd}
-             onContextMenu={(e) => { e.preventDefault(); setCmdOpen(true); }} // ACESSO RÁPIDO (BOTÃO DIREITO)
+             onContextMenu={(e) => { e.preventDefault(); setCmdOpen(true); }} 
         >
+             {isSystemLocked && <SubscriptionModal theme={theme} user={user} onUnlock={() => setIsSystemLocked(false)} />}
+
              <Toast message={notification.message} type={notification.type} visible={notification.visible} />
              <ConfirmModal isOpen={confirmState.isOpen} title={confirmState.title} message={confirmState.message} onConfirm={confirmState.onConfirm} onCancel={() => setConfirmState((prev:any) => ({ ...prev, isOpen: false }))} type={confirmState.type} theme={theme} />
              
-             {/* Premium Utilities */}
              <CommandPalette isOpen={cmdOpen} onClose={() => setCmdOpen(false)} theme={theme} actions={commandActions} />
              <QuickCalculator isOpen={calcOpen} onClose={() => setCalcOpen(false)} theme={theme} />
 
@@ -1397,7 +782,6 @@ const AppContent = () => {
              />
 
              <div className={`flex-1 flex flex-col h-full min-w-0 ${theme.contentBg || 'bg-black/20'}`}>
-                {/* Header */}
                 <div className={`h-16 flex items-center justify-between px-4 md:px-8 border-b ${theme.border} bg-opacity-80 backdrop-blur-md z-30 flex-shrink-0`}>
                     <div className="flex items-center gap-4 flex-1">
                         <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 -ml-2"><Icons.Menu size={24} /></button>
@@ -1405,11 +789,9 @@ const AppContent = () => {
                         {['passengers', 'drivers', 'trips', 'achados', 'lostFound'].includes(view) && (<div className="flex-1 max-w-md ml-auto md:ml-4"><div className="relative group"><div className="absolute inset-y-0 left-0 pl-3 flex items-center opacity-50"><Icons.Search size={16} /></div><input type="text" placeholder={`Pesquisar...`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full ${theme.inner} border ${theme.border} rounded-xl py-2 pl-10 pr-4 text-sm outline-none ${theme.text}`}/>{searchTerm && (<button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-0 pr-3 flex items-center opacity-50"><Icons.X size={14} /></button>)}</div></div>)}
                     </div>
                     <div className="flex gap-2 ml-2">
-                        {/* Command Trigger */}
                         <button onClick={() => setCmdOpen(true)} className={`p-2.5 rounded-xl ${theme.ghost || 'bg-white/5 hover:bg-white/10 text-white/50'} hidden md:flex items-center gap-2 text-xs font-bold border ${theme.divider || 'border-white/5'} mr-2`} title="Command Palette">
                             <Icons.Command size={14} /> <span className="opacity-50">CTRL+K</span>
                         </button>
-
                         {view !== 'lostFound' && view !== 'trips' && view !== 'dashboard' && view !== 'settings' && view !== 'billing' && <button onClick={()=>setFilterStatus(filterStatus==='Ativo'?'Todos':'Ativo')} className={`p-2 rounded-lg ${filterStatus==='Ativo'?theme.accent:'opacity-50'}`}><Icons.Refresh size={20}/></button>}
                         <button onClick={()=>{ if(view==='passengers') { setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount:0, date:getTodayDate(), time: ''}); setModal('passenger'); } else if(view==='trips') { setSuggestedTrip(null); setEditingTripId(null); setModal('trip'); } else if(view==='lostFound') { setFormData({date: getTodayDate(), status: 'Pendente'}); setModal('lostFound'); } else if(view==='drivers') { setFormData({status: 'Ativo'}); setModal('driver'); } else { setSuggestedTrip(null); setEditingTripId(null); setModal('trip'); } }} className={`${theme.primary} p-2.5 rounded-xl shadow-lg active:scale-95`}><Icons.Plus/></button>
                     </div>
@@ -1420,10 +802,9 @@ const AppContent = () => {
                         {view === 'dashboard' && <Dashboard data={data} theme={theme} setView={setView} onOpenModal={(t:string)=>{ if(t==='newPax'){ setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate(), time: ''}); setModal('passenger'); } else { setModal('trip'); setFormData({}); } }} dbOp={dbOp} setAiModal={setAiModal} user={user} notify={notify} />}
                         {view === 'passengers' && <Passageiros data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setFormData={setFormData} setModal={setModal} del={del} notify={notify} />}
                         {view === 'drivers' && <Motoristas data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setFormData={setFormData} setModal={setModal} del={del} notify={notify} />}
-                        {view === 'trips' && <Viagens data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} openEditTrip={openEditTrip} updateTripStatus={updateTripStatus} del={del} duplicateTrip={duplicateTrip} notify={notify} />}
+                        {view === 'trips' && <Viagens data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} openEditTrip={openEditTrip} updateTripStatus={updateTripStatus} del={del} duplicateTrip={duplicateTrip} notify={notify} loadOlderTrips={loadOlderTrips} />}
                         {view === 'appointments' && <Agendamentos data={data} theme={theme} setFormData={setFormData} setModal={setModal} dbOp={dbOp} setSuggestedTrip={setSuggestedTrip} setEditingTripId={setEditingTripId} notify={notify} requestConfirm={requestConfirm} />}
                         
-                        {/* Tabela Recebe Função para Calcular Listas Futuras */}
                         {view === 'table' && <Tabela 
                             data={data} theme={theme} tableTab={tableTab} setTableTab={setTableTab} 
                             currentOpDate={currentOpDate} getTodayDate={getTodayDate} analysisDate={analysisDate} setAnalysisDate={setAnalysisDate} 
@@ -1436,68 +817,43 @@ const AppContent = () => {
                             cannedMessages={cannedMessages} addCannedMessage={addCannedMessage} updateCannedMessage={updateCannedMessage} deleteCannedMessage={deleteCannedMessage} handleCannedDragStart={handleCannedDragStart} handleCannedDrop={handleCannedDrop} handleGeneralDragStart={handleGeneralDragStart} handleGeneralDrop={handleGeneralDrop} 
                             addNullLousaItem={addNullLousaItem} notify={notify} 
                             getRotatedList={getRotatedList} 
-                            getRotatedMadrugadaList={getRotatedMadrugadaList} // Nova prop
+                            getRotatedMadrugadaList={getRotatedMadrugadaList}
                         />}
                         
                         {(view === 'financeiro' || view === 'billing') && <Financeiro data={data} theme={theme} pricePerPassenger={pricePerPassenger} billingData={(() => { 
                             const targetMonth = billingDate.getMonth(); 
                             const targetYear = billingDate.getFullYear(); 
-                            
                             const validTrips = data.trips.filter((t:any) => { 
-                                // Inclui "Cancelada" apenas para filtrar fora, aceita "Em andamento" e "Finalizada"
                                 if (t.status === 'Cancelada' || !t.date) return false; 
                                 const [y, m, d] = t.date.split('-').map(Number); 
                                 return (m - 1) === targetMonth && y === targetYear; 
                             }); 
-                            
                             const groups:any = {}; 
-                            let totalPending = 0; 
-                            let totalPaid = 0; 
-                            
+                            let totalPending = 0; let totalPaid = 0; 
                             validTrips.forEach((t:any) => { 
-                                let value = 0; 
-                                let pCount = 0; 
-                                
-                                if (t.isExtra) { 
-                                    value = parseFloat(t.value) || 0; 
-                                    pCount = 0; 
-                                } else if (t.isMadrugada) { 
+                                let value = 0; let pCount = 0; 
+                                if (t.isExtra) { value = parseFloat(t.value) || 0; pCount = 0; } 
+                                else if (t.isMadrugada) { 
                                     pCount = t.pCountSnapshot !== undefined ? parseInt(t.pCountSnapshot || 0) : parseInt(t.pCount || 0); 
-                                    // Força 4 reais se não tiver preço salvo
                                     const unitPrice = t.ticketPrice !== undefined ? Number(t.ticketPrice) : 4; 
                                     value = pCount * unitPrice; 
                                 } else { 
-                                    // Lógica para Viagens Normais (Finalizada ou Em Andamento)
-                                    if (t.pCountSnapshot !== undefined && t.pCountSnapshot !== null) {
-                                        pCount = parseInt(t.pCountSnapshot || 0);
-                                    } else if (t.passengersSnapshot) {
-                                        pCount = t.passengersSnapshot.reduce((acc:number, p:any) => acc + parseInt(p.passengerCount || 1), 0);
-                                    } else {
-                                        // Cálculo em tempo real para "Em andamento"
-                                        pCount = data.passengers.filter((p:any) => (t.passengerIds||[]).includes(p.id)).reduce((a:number,b:any) => a + parseInt(b.passengerCount||1), 0);
-                                    }
-                                    
-                                    // Força 4 reais se não tiver preço salvo
+                                    if (t.pCountSnapshot !== undefined && t.pCountSnapshot !== null) pCount = parseInt(t.pCountSnapshot || 0);
+                                    else if (t.passengersSnapshot) pCount = t.passengersSnapshot.reduce((acc:number, p:any) => acc + parseInt(p.passengerCount || 1), 0);
+                                    else pCount = data.passengers.filter((p:any) => (t.passengerIds||[]).includes(p.id)).reduce((a:number,b:any) => a + parseInt(b.passengerCount||1), 0);
                                     const unitPrice = t.ticketPrice !== undefined ? Number(t.ticketPrice) : 4; 
                                     value = pCount * unitPrice; 
-                                    
-                                    // Caso legado manual
                                     if (pCount === 0 && t.value) value = parseFloat(t.value); 
                                 } 
-                                
                                 const isPaid = t.paymentStatus === 'Pago'; 
-                                if (isPaid) totalPaid += value; 
-                                else totalPending += value; 
-                                
+                                if (isPaid) totalPaid += value; else totalPending += value; 
                                 const dateKey = t.date; 
                                 if (!groups[dateKey]) groups[dateKey] = { date: dateKey, trips: [], totalValue: 0 }; 
                                 groups[dateKey].trips.push({ ...t, pCount, value, isPaid }); 
                                 groups[dateKey].totalValue += value; 
                             }); 
-                            
                             const sortedGroups = Object.values(groups).sort((a:any, b:any) => b.date.localeCompare(a.date)); 
                             sortedGroups.forEach((g:any) => g.trips.sort((a:any, b:any) => (b.time || '').localeCompare(a.time || ''))); 
-                            
                             return { groups: sortedGroups, summary: { pending: totalPending, paid: totalPaid, total: totalPending + totalPaid } }; 
                         })()} billingDate={billingDate} prevBillingMonth={()=>setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth()-1, 1))} nextBillingMonth={()=>setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth()+1, 1))} togglePaymentStatus={(trip:any) => dbOp('update', 'trips', { id: trip.id, paymentStatus: trip.paymentStatus === 'Pago' ? 'Pendente' : 'Pago' })} sendBillingMessage={sendBillingMessage} del={del} setFormData={setFormData} setModal={setModal} openEditTrip={openEditTrip} user={user} notify={notify} />}
                         {view === 'achados' && <Achados data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} dbOp={dbOp} del={del} notify={notify} />}
