@@ -179,8 +179,6 @@ export const compressImage = (file: File): Promise<string> => {
 
 /* --- PRINT FUNCTION FIXED --- */
 export const handlePrint = async (targetId: string, filename: string, title: string, options: any = {}) => {
-    // ... existing handlePrint content (omitted for brevity, assume it's the same) ...
-    // Using simple placeholder to save space as it's not changed
     const element = document.getElementById(targetId);
     if (!element) throw new Error("Elemento não encontrado para impressão.");
     
@@ -208,7 +206,6 @@ export const handlePrint = async (targetId: string, filename: string, title: str
         clone = element.cloneNode(true) as HTMLElement;
         clone.querySelectorAll('.hide-on-print').forEach(el => el.remove());
         clone.querySelectorAll('.show-on-print').forEach(el => { el.classList.remove('hidden'); (el as any).style.display = 'block'; });
-        // ... more print styles logic ... (simplified for this update)
         
         // Render clone to wrapper
         const contentContainer = document.createElement('div');
@@ -235,8 +232,6 @@ export const handlePrint = async (targetId: string, filename: string, title: str
 };
 
 // --- SECURITY FINGERPRINTING ---
-
-// Simple hash function (Cypher 53)
 const cyrb53 = (str: string, seed = 0) => {
     let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
     for (let i = 0, ch; i < str.length; i++) {
@@ -249,28 +244,23 @@ const cyrb53 = (str: string, seed = 0) => {
     return 4294967296 * (2097151 & h2) + (h1 >>> 0);
 };
 
-// Helper for Canvas Fingerprint (Hardware Acceleration Signature)
 const getCanvasFingerprint = () => {
     try {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         if (!ctx) return 'no_canvas';
         
-        // Setup complex scene to trigger hardware specific rasterization differences
         canvas.width = 280;
         canvas.height = 60;
         ctx.textBaseline = "alphabetic";
         ctx.fillStyle = "#f60";
         ctx.fillRect(125, 1, 62, 20);
         ctx.fillStyle = "#069";
-        // Use a fallback font to force system default rendering paths
         ctx.font = "11pt no-real-font-123"; 
         ctx.fillText("Cwm fjordbank glyphs vext quiz, \ud83d\ude03", 2, 15);
         ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
         ctx.font = "18pt Arial";
         ctx.fillText("Cwm fjordbank glyphs vext quiz, \ud83d\ude03", 4, 45);
-        
-        // Composite operation triggers GPU blending logic
         ctx.globalCompositeOperation = "multiply";
         ctx.fillStyle = "rgb(255,0,255)";
         ctx.beginPath();
@@ -291,8 +281,6 @@ export const getDeviceFingerprint = async () => {
     try {
         const nav = window.navigator;
         const screen = window.screen;
-
-        // 1. GPU (WebGL)
         const getWebGL = () => {
             try {
                 const canvas = document.createElement('canvas');
@@ -307,8 +295,6 @@ export const getDeviceFingerprint = async () => {
                 return `${vendor}::${renderer}`;
             } catch (e) { return 'webgl_error'; }
         };
-
-        // 2. OS Identification
         const getOS = () => {
             const ua = nav.userAgent;
             if (ua.indexOf("Win") !== -1) return "Windows";
@@ -318,73 +304,42 @@ export const getDeviceFingerprint = async () => {
             if (ua.indexOf("iOS") !== -1) return "iOS";
             return "UnknownOS";
         };
-
-        // 3. Hardware Specs
         // @ts-ignore
         const cores = nav.hardwareConcurrency || 'x';
         // @ts-ignore
         const ram = nav.deviceMemory || 'x';
-        
-        // Orientation-independent screen dimensions
         const sW = Math.max(screen.width, screen.height);
         const sH = Math.min(screen.width, screen.height);
         const screenSpec = `${sW}x${sH}x${screen.colorDepth}x${window.devicePixelRatio}`;
-        
-        // 4. Timezone
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown_tz';
-
-        // 5. Canvas (Rendering Engine Signature)
         const canvasFP = getCanvasFingerprint();
-
-        // COMPOSIÇÃO DO FINGERPRINT
-        // Adicionando Canvas que é muito específico do dispositivo/engine
-        const hardwareString = [
-            getOS(),
-            // @ts-ignore
-            nav.platform,
-            cores,
-            ram,
-            screenSpec,
-            tz,
-            getWebGL(),
-            canvasFP 
-        ].join('|||');
-
+        const hardwareString = [ getOS(), (nav as any).platform, cores, ram, screenSpec, tz, getWebGL(), canvasFP ].join('|||');
         return cyrb53(hardwareString).toString(16);
     } catch (e) {
         return 'fallback_id_' + Date.now();
     }
 };
 
-// Extrator de detalhes para exibição (Log)
 export const parseUserAgent = (ua: string) => {
     let device = 'Desktop';
     let browser = 'Unknown';
     let os = 'Unknown OS';
-    
-    // Device
     if (/mobile/i.test(ua)) device = 'Mobile';
     if (/tablet/i.test(ua)) device = 'Tablet';
     if (/iphone/i.test(ua)) device = 'iPhone';
     if (/android/i.test(ua)) device = 'Android';
-    
-    // Browser
     if (/edg/i.test(ua)) browser = 'Edge';
     else if (/chrome/i.test(ua)) browser = 'Chrome';
     else if (/firefox/i.test(ua)) browser = 'Firefox';
     else if (/safari/i.test(ua)) browser = 'Safari';
-    
-    // OS
     if (/windows/i.test(ua)) os = 'Windows';
     else if (/mac os/i.test(ua)) os = 'MacOS';
     else if (/linux/i.test(ua)) os = 'Linux';
     else if (/android/i.test(ua)) os = 'Android';
     else if (/ios/i.test(ua)) os = 'iOS';
-    
     return { device, browser, os };
 };
 
-// Helper para obter Hardware Info legível (para logs)
 export const getHardwareInfo = () => {
     try {
         const canvas = document.createElement('canvas');
@@ -398,4 +353,43 @@ export const getHardwareInfo = () => {
         }
         return gpu;
     } catch(e) { return 'Unknown GPU'; }
-}
+};
+
+// --- MERCADO PAGO INTEGRATION (VIA VERCEL SERVERLESS) ---
+
+export const generatePixPayment = async (email: string) => {
+    try {
+        const safeEmail = email ? email.replace(/[^a-zA-Z0-9@._-]/g, '') : "usuario@boradevan.com.br";
+
+        // Chama a API interna na pasta /api/create-payment.js
+        const response = await fetch("/api/create-payment", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email: safeEmail })
+        });
+
+        if (!response.ok) {
+            const errorDetails = await response.json();
+            throw new Error(errorDetails.error || "Erro na API do Mercado Pago");
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (e: any) {
+        console.error("MP Error:", e);
+        throw e;
+    }
+};
+
+export const checkPaymentStatus = async (paymentId: string | number) => {
+    try {
+        // Chama a API interna na pasta /api/check-payment.js
+        const response = await fetch(`/api/check-payment?id=${paymentId}`);
+        const data = await response.json();
+        return data.status; // approved, pending, rejected
+    } catch (e) {
+        return "error";
+    }
+};
