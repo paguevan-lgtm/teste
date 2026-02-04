@@ -3,9 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { Icons } from './Shared';
 
-// Usando as mesmas credenciais fornecidas
-const MERCADO_PAGO_ACCESS_TOKEN = "APP_USR-2028294536116664-020323-6cd677880a20d8c24ac12a297178c743-753231933";
-
 export const PaymentGate = ({ user, children }: any) => {
     const [loading, setLoading] = useState(true);
     const [isLocked, setIsLocked] = useState(false);
@@ -53,7 +50,7 @@ export const PaymentGate = ({ user, children }: any) => {
         return () => subRef.off('value', handleSnapshot);
     }, [user]);
 
-    // Create Direct Pix Payment
+    // Create Direct Pix Payment using Vercel Proxy
     const handlePayClick = async () => {
         setVerifying(true);
         try {
@@ -69,11 +66,11 @@ export const PaymentGate = ({ user, children }: any) => {
                 external_reference: `sub_${Date.now()}`
             };
 
-            const response = await fetch("https://api.mercadopago.com/v1/payments", {
+            // Call local API route instead of Mercado Pago directly
+            const response = await fetch("/api/create_payment", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${MERCADO_PAGO_ACCESS_TOKEN}`,
                     "X-Idempotency-Key": `pay_${Date.now()}`
                 },
                 body: JSON.stringify(paymentData)
@@ -94,11 +91,12 @@ export const PaymentGate = ({ user, children }: any) => {
                     alert("Erro ao gerar QR Code. Tente novamente.");
                 }
             } else {
-                alert("Erro ao criar pagamento: " + (data.message || 'Desconhecido'));
+                console.error("Payment Error:", data);
+                alert("Erro ao criar pagamento: " + (data.message || 'Erro desconhecido na API'));
             }
         } catch (error) {
             console.error(error);
-            alert("Erro de conexão com Mercado Pago.");
+            alert("Erro de conexão com servidor de pagamento.");
         } finally {
             setVerifying(false);
         }
@@ -107,11 +105,8 @@ export const PaymentGate = ({ user, children }: any) => {
     const startPolling = (pid: string) => {
         const interval = setInterval(async () => {
             try {
-                const response = await fetch(`https://api.mercadopago.com/v1/payments/${pid}`, {
-                    headers: {
-                        "Authorization": `Bearer ${MERCADO_PAGO_ACCESS_TOKEN}`
-                    }
-                });
+                // Call local API route
+                const response = await fetch(`/api/check_payment?id=${pid}`);
                 const data = await response.json();
                 
                 if (data.status === 'approved') {
