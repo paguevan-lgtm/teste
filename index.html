@@ -90,19 +90,28 @@
         .logo-bounce { animation: bounceLogo 1s var(--ease-elastic) infinite; }
         @keyframes bounceLogo { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
 
+        /* --- MISSING ANIMATIONS FIXED --- */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+
+        @keyframes bounceIn {
+            0% { opacity: 0; transform: scale(0.9); }
+            50% { opacity: 1; transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+        .animate-bounce-in { animation: bounceIn 0.5s var(--ease-elastic) forwards; }
+
         /* --- TOUR STYLES --- */
         .tour-overlay {
             position: fixed; inset: 0; z-index: 10000;
-            background: transparent; /* Alterado para transparente, o spotlight faz o escurecimento */
-            pointer-events: none; /* Deixa clicar no elemento destacado se precisar */
+            background: transparent; 
+            pointer-events: none; 
             transition: all 0.5s ease;
         }
         
-        /* O Spotlight agora usa position FIXED para garantir coordenadas visuais corretas */
         .tour-spotlight {
             position: fixed; 
             border-radius: 12px;
-            /* Sombra gigante para escurecer o resto da tela */
             box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.75), 0 0 30px rgba(245, 158, 11, 0.5); 
             border: 2px solid #f59e0b;
             transition: all 0.4s var(--ease-out-expo);
@@ -110,7 +119,7 @@
             z-index: 10001;
         }
         .tour-tooltip {
-            position: fixed; /* Tooltip também fixed para acompanhar o spotlight */
+            position: fixed; 
             z-index: 10002;
             width: 320px;
             max-width: 85vw;
@@ -403,13 +412,11 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body>
     <div id="loader"><div class="spinner"></div><p style="margin-top:20px; color:#94a3b8; font-size:12px; font-weight:bold;">Bora de Van 🚐</p></div>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
     <script>setTimeout(()=>{const l=document.getElementById('loader');if(l)l.remove()},4000);</script>
-<script type="module" src="/index.tsx"></script>
 </body>
 </html>
