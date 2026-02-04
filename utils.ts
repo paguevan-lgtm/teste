@@ -249,13 +249,50 @@ const cyrb53 = (str: string, seed = 0) => {
     return 4294967296 * (2097151 & h2) + (h1 >>> 0);
 };
 
+// Helper for Canvas Fingerprint (Hardware Acceleration Signature)
+const getCanvasFingerprint = () => {
+    try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return 'no_canvas';
+        
+        // Setup complex scene to trigger hardware specific rasterization differences
+        canvas.width = 280;
+        canvas.height = 60;
+        ctx.textBaseline = "alphabetic";
+        ctx.fillStyle = "#f60";
+        ctx.fillRect(125, 1, 62, 20);
+        ctx.fillStyle = "#069";
+        // Use a fallback font to force system default rendering paths
+        ctx.font = "11pt no-real-font-123"; 
+        ctx.fillText("Cwm fjordbank glyphs vext quiz, \ud83d\ude03", 2, 15);
+        ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
+        ctx.font = "18pt Arial";
+        ctx.fillText("Cwm fjordbank glyphs vext quiz, \ud83d\ude03", 4, 45);
+        
+        // Composite operation triggers GPU blending logic
+        ctx.globalCompositeOperation = "multiply";
+        ctx.fillStyle = "rgb(255,0,255)";
+        ctx.beginPath();
+        ctx.arc(50, 50, 50, 0, Math.PI * 2, true); 
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "rgb(0,255,255)";
+        ctx.beginPath();
+        ctx.arc(100, 50, 50, 0, Math.PI * 2, true); 
+        ctx.closePath();
+        ctx.fill();
+        
+        return canvas.toDataURL();
+    } catch (e) { return 'canvas_err'; }
+};
+
 export const getDeviceFingerprint = async () => {
     try {
         const nav = window.navigator;
         const screen = window.screen;
 
-        // 1. GPU (WebGL) - ANCORA DE HARDWARE
-        // Identifica a placa de vídeo física, que é imutável entre navegadores.
+        // 1. GPU (WebGL)
         const getWebGL = () => {
             try {
                 const canvas = document.createElement('canvas');
@@ -271,8 +308,7 @@ export const getDeviceFingerprint = async () => {
             } catch (e) { return 'webgl_error'; }
         };
 
-        // 2. OS Identification (Regex rigoroso)
-        // Ignora versão do browser (Chrome/120 vs Edge/120) mas pega o OS base.
+        // 2. OS Identification
         const getOS = () => {
             const ua = nav.userAgent;
             if (ua.indexOf("Win") !== -1) return "Windows";
@@ -283,19 +319,25 @@ export const getDeviceFingerprint = async () => {
             return "UnknownOS";
         };
 
-        // 3. Hardware Specs (Núcleos + RAM + Resolução + Cores)
+        // 3. Hardware Specs
         // @ts-ignore
         const cores = nav.hardwareConcurrency || 'x';
         // @ts-ignore
         const ram = nav.deviceMemory || 'x';
-        const screenSpec = `${screen.width}x${screen.height}x${screen.colorDepth}`;
+        
+        // Orientation-independent screen dimensions
+        const sW = Math.max(screen.width, screen.height);
+        const sH = Math.min(screen.width, screen.height);
+        const screenSpec = `${sW}x${sH}x${screen.colorDepth}x${window.devicePixelRatio}`;
         
         // 4. Timezone
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown_tz';
 
+        // 5. Canvas (Rendering Engine Signature)
+        const canvasFP = getCanvasFingerprint();
+
         // COMPOSIÇÃO DO FINGERPRINT
-        // Não incluímos o UserAgent completo para evitar que a mudança de navegador altere o hash.
-        // Baseamos apenas em características físicas e de sistema operacional.
+        // Adicionando Canvas que é muito específico do dispositivo/engine
         const hardwareString = [
             getOS(),
             // @ts-ignore
@@ -304,7 +346,8 @@ export const getDeviceFingerprint = async () => {
             ram,
             screenSpec,
             tz,
-            getWebGL()
+            getWebGL(),
+            canvasFP 
         ].join('|||');
 
         return cyrb53(hardwareString).toString(16);
