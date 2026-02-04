@@ -76,24 +76,34 @@ export const PaymentGate = ({ user, children }: any) => {
                 body: JSON.stringify(paymentData)
             });
 
-            const data = await response.json();
-            
-            if (data.status === 'pending' || data.status === 'created') {
-                const qrData = data.point_of_interaction?.transaction_data;
-                if (qrData) {
-                    setQrCodeBase64(qrData.qr_code_base64);
-                    setQrCodeCopyPaste(qrData.qr_code);
-                    setPaymentId(data.id);
-                    
-                    // Start Polling for approval immediately
-                    startPolling(data.id);
+            // Handle potential HTML response (404/500 from Vercel)
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                const data = await response.json();
+                
+                if (data.status === 'pending' || data.status === 'created') {
+                    const qrData = data.point_of_interaction?.transaction_data;
+                    if (qrData) {
+                        setQrCodeBase64(qrData.qr_code_base64);
+                        setQrCodeCopyPaste(qrData.qr_code);
+                        setPaymentId(data.id);
+                        
+                        // Start Polling for approval immediately
+                        startPolling(data.id);
+                    } else {
+                        alert("Erro ao gerar QR Code. Tente novamente.");
+                    }
                 } else {
-                    alert("Erro ao gerar QR Code. Tente novamente.");
+                    console.error("Payment Error:", data);
+                    alert("Erro ao criar pagamento: " + (data.message || 'Erro desconhecido na API'));
                 }
             } else {
-                console.error("Payment Error:", data);
-                alert("Erro ao criar pagamento: " + (data.message || 'Erro desconhecido na API'));
+                // Not JSON (Likely 404 HTML)
+                const text = await response.text();
+                console.error("Non-JSON API Response:", text);
+                alert("Erro de sistema: API de pagamento não encontrada (404). Verifique se os arquivos /api/create_payment.js existem e se o Vercel está configurado.");
             }
+
         } catch (error) {
             console.error(error);
             alert("Erro de conexão com servidor de pagamento.");
@@ -107,11 +117,16 @@ export const PaymentGate = ({ user, children }: any) => {
             try {
                 // Call local API route
                 const response = await fetch(`/api/check_payment?id=${pid}`);
-                const data = await response.json();
                 
-                if (data.status === 'approved') {
-                    clearInterval(interval);
-                    activateSubscription(data.id);
+                // Handle JSON check
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    const data = await response.json();
+                    
+                    if (data.status === 'approved') {
+                        clearInterval(interval);
+                        activateSubscription(data.id);
+                    }
                 }
             } catch (e) {
                 console.error("Polling error", e);
