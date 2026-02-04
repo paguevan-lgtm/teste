@@ -1,6 +1,5 @@
 
 export default async function handler(req, res) {
-    // Headers CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
@@ -20,6 +19,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'ID is required' });
     }
 
+    // SEU TOKEN DE PRODUÇÃO
     const MP_ACCESS_TOKEN = "APP_USR-2028294536116664-020323-6cd677880a20d8c24ac12a297178c743-753231933";
 
     try {
