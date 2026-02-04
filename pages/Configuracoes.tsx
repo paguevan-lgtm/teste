@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icons, Input, Button } from '../components/Shared';
 import { THEMES } from '../constants';
-import { getAvatarUrl, generateUniqueId, getTodayDate, compressImage } from '../utils';
+import { getAvatarUrl, generateUniqueId, getTodayDate, compressImage, parseUserAgent } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Configuracoes({ user, theme, restartTour, setAiModal, geminiKey, setGeminiKey, saveApiKey, ipToBlock, setIpToBlock, blockIp, data, del, ipHistory, ipLabels, saveIpLabel, changeTheme, themeKey, dbOp, notify, requestConfirm, setView }: any) {
@@ -12,7 +12,7 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
     const [newsTitle, setNewsTitle] = useState('');
     const [newsContent, setNewsContent] = useState('');
     const [newsImage, setNewsImage] = useState<string|null>(null);
-    const [activeTab, setActiveTab] = useState('geral'); // geral | admin
+    const [securityTab, setSecurityTab] = useState('timeline'); // timeline | blocked
 
     const isAdmin = user.username === 'Breno';
 
@@ -94,6 +94,56 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
             notify("Erro ao gerar backup.", "error");
         }
     };
+
+    const banDevice = (deviceId: string, reason: string) => {
+        if (!deviceId) return;
+        requestConfirm("Banir Dispositivo?", "Este aparelho não conseguirá mais fazer login, mesmo trocando de IP.", () => {
+            dbOp('update', `blocked_devices/${deviceId}`, { 
+                reason, 
+                blockedBy: user.username,
+                blockedAt: Date.now()
+            });
+        });
+    };
+
+    const unbanDevice = (deviceId: string) => {
+        requestConfirm("Desbloquear?", "O aparelho voltará a ter acesso.", () => {
+            dbOp('delete', `blocked_devices/${deviceId}`, null);
+        });
+    };
+
+    // Prepare Blocked List
+    const blockedDevicesList = useState([]);
+    useEffect(() => {
+       // Using raw data from props, usually we'd pass blocked_devices explicitly or use db listener
+       // Assuming dbOp works directly, we need to fetch this list or rely on `data` having it if `App.tsx` fetches it.
+       // App.tsx currently fetches `blocked_ips`. Let's assume we need to use `data.blocked_devices` if added, 
+       // but for now let's modify the UI to use whatever data source is available or create a local listener.
+       // Since I cannot modify App.tsx to fetch `blocked_devices` in this turn easily without outputting App.tsx again,
+       // I'll rely on the existing prop structure but fetch blocked devices manually here for Admin.
+    }, []);
+
+    // NOTE: In a real scenario, I'd update App.tsx to fetch 'blocked_devices'. 
+    // Here I will use a direct DB listener for the admin panel inside the component.
+    const [blockedList, setBlockedList] = useState<any[]>([]);
+    
+    // Fetch Blocked Devices
+    useEffect(() => {
+        if (!isAdmin || !dbOp) return;
+        // @ts-ignore
+        import('../firebase').then(({ db }) => {
+            if(db) {
+                const ref = db.ref('blocked_devices');
+                ref.on('value', (snap:any) => {
+                    const val = snap.val();
+                    const list = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
+                    setBlockedList(list);
+                });
+                return () => ref.off();
+            }
+        });
+    }, [isAdmin]);
+
 
     return (
         <div className="space-y-6 pb-20">
@@ -273,8 +323,8 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                             <Icons.Shield size={20} />
                         </div>
                         <div>
-                            <h3 className="font-bold text-red-200">Painel Administrativo</h3>
-                            <p className="text-xs text-red-300/60">Área restrita para controle de segurança e avisos</p>
+                            <h3 className="font-bold text-red-200">Painel de Segurança & Avisos</h3>
+                            <p className="text-xs text-red-300/60">Controle de acesso por Dispositivo (Fingerprint)</p>
                         </div>
                     </div>
 
@@ -321,67 +371,87 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                             </div>
                         </div>
 
-                        {/* Segurança e Logs */}
-                        <div className="space-y-6">
-                            {/* Bloqueio */}
-                            <div>
-                                <h4 className="text-sm font-bold text-white mb-4 uppercase tracking-wider flex items-center gap-2">
-                                    <Icons.Lock size={14}/> Bloqueio de IP
-                                </h4>
+                        {/* Fingerprint Security Panel */}
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between mb-2">
                                 <div className="flex gap-2">
-                                    <input className="bg-black/20 border border-white/10 rounded-xl px-4 py-2 text-sm flex-1 outline-none focus:border-red-500/50" placeholder="IP para bloquear" value={ipToBlock} onChange={(e:any)=>setIpToBlock(e.target.value)} />
-                                    <button onClick={blockIp} className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 px-4 rounded-xl text-sm font-bold transition-colors">Bloquear</button>
-                                </div>
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                    {data.blocked_ips && data.blocked_ips.map((item:any) => (
-                                        <div key={item.id} className="bg-red-900/20 border border-red-500/20 text-red-300 text-xs px-2 py-1 rounded-lg flex items-center gap-2">
-                                            <span className="font-mono">{item.ip}</span>
-                                            <button onClick={()=>del('blocked_ips', item.id)} className="hover:text-white"><Icons.X size={12}/></button>
-                                        </div>
-                                    ))}
+                                    <button onClick={()=>setSecurityTab('timeline')} className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${securityTab==='timeline' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}>Timeline</button>
+                                    <button onClick={()=>setSecurityTab('blocked')} className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${securityTab==='blocked' ? 'bg-red-500/20 text-red-300' : 'text-white/40 hover:text-white'}`}>Bloqueados ({blockedList.length})</button>
                                 </div>
                             </div>
 
-                            {/* Logs */}
-                            <div>
-                                <h4 className="text-sm font-bold text-white mb-4 uppercase tracking-wider flex items-center gap-2 border-t border-white/10 pt-4">
-                                    <Icons.List size={14}/> Logs de Acesso
-                                </h4>
-                                <div className="bg-black/20 rounded-xl border border-white/5 max-h-60 overflow-y-auto custom-scrollbar p-1">
+                            {/* TIMELINE */}
+                            {securityTab === 'timeline' && (
+                                <div className="bg-black/20 rounded-xl border border-white/5 max-h-80 overflow-y-auto custom-scrollbar p-1">
                                     {ipHistory.map((log:any) => { 
-                                        const safeIp = (log.ip||'').replace(/\./g, '_'); 
-                                        const currentLabel = ipLabels[safeIp] || ''; 
-                                        
-                                        let locationStr = '';
+                                        const deviceInfo = log.deviceInfo || parseUserAgent(log.device || '');
+                                        const isBanned = blockedList.some(b => b.id === log.deviceId);
+
+                                        let locationStr = 'Local Desconhecido';
                                         if (log.location?.exact_address) {
                                             const addr = log.location.exact_address;
                                             const bairro = addr.suburb || addr.neighbourhood || addr.city_district || '';
                                             const cidade = addr.city || addr.town || addr.village || '';
                                             locationStr = `${bairro ? bairro + ', ' : ''}${cidade}`;
-                                        } else if (log.location) {
-                                            locationStr = `${log.location.city || ''} - ${log.location.region || ''}`;
                                         }
 
                                         return (
-                                            <div key={log.id} className="p-2 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <span className="text-[10px] text-amber-400 font-bold">{log.username}</span>
-                                                    <span className="text-[9px] opacity-40">{new Date(log.timestamp).toLocaleString()}</span>
+                                            <div key={log.id} className="p-3 border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors group">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className={`w-2 h-2 rounded-full ${isBanned ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                                                        <span className="text-xs font-bold text-white">{log.username}</span>
+                                                        <span className="text-[10px] opacity-40">{new Date(log.timestamp).toLocaleString()}</span>
+                                                    </div>
+                                                    {!isBanned && log.deviceId && (
+                                                        <button 
+                                                            onClick={()=>banDevice(log.deviceId, 'Banido pelo Admin')} 
+                                                            className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20"
+                                                        >
+                                                            Banir
+                                                        </button>
+                                                    )}
+                                                    {isBanned && <span className="text-[10px] text-red-500 font-bold uppercase">Banido</span>}
                                                 </div>
-                                                <div className="flex items-center gap-2 text-xs">
-                                                    <span className="font-mono opacity-60 bg-white/5 px-1 rounded">{log.ip}</span>
-                                                    <input 
-                                                        className="bg-transparent border-none focus:ring-0 text-white/70 text-[10px] flex-1 min-w-0" 
-                                                        placeholder={locationStr || "Sem local"} 
-                                                        defaultValue={currentLabel || locationStr} 
-                                                        onBlur={(e) => saveIpLabel(log.ip, e.target.value)} 
-                                                    />
+                                                
+                                                <div className="flex items-center gap-3 mt-2">
+                                                    <div className="w-8 h-8 rounded bg-white/5 flex items-center justify-center text-white/50">
+                                                        {deviceInfo.device === 'Desktop' ? <Icons.Laptop size={16}/> : <Icons.Smartphone size={16}/>}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="text-xs text-white/80 font-bold truncate">{deviceInfo.browser} on {deviceInfo.device}</div>
+                                                        <div className="text-[10px] text-white/40 truncate flex gap-2">
+                                                            <span>{locationStr}</span>
+                                                            <span className="opacity-50">•</span>
+                                                            <span className="font-mono text-white/30" title={log.deviceId}>{log.deviceId?.substring(0,8)}...</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ); 
                                     })}
                                 </div>
-                            </div>
+                            )}
+
+                            {/* BLOCKED LIST */}
+                            {securityTab === 'blocked' && (
+                                <div className="bg-black/20 rounded-xl border border-white/5 max-h-80 overflow-y-auto custom-scrollbar p-2 space-y-2">
+                                    {blockedList.length > 0 ? blockedList.map((dev:any) => (
+                                        <div key={dev.id} className="bg-red-900/10 border border-red-500/20 p-3 rounded-lg flex justify-between items-center">
+                                            <div>
+                                                <div className="text-xs font-bold text-red-200 flex items-center gap-2">
+                                                    <Icons.Fingerprint size={14}/> ID: {dev.id.substring(0,12)}...
+                                                </div>
+                                                <div className="text-[10px] text-red-400/60 mt-1">Motivo: {dev.reason || 'Sem motivo'}</div>
+                                                <div className="text-[10px] text-red-400/40">Em: {new Date(dev.blockedAt).toLocaleDateString()}</div>
+                                            </div>
+                                            <button onClick={()=>unbanDevice(dev.id)} className="p-2 bg-white/5 rounded hover:bg-white/10 text-white/70" title="Desbloquear"><Icons.Check size={16}/></button>
+                                        </div>
+                                    )) : (
+                                        <div className="text-center py-8 opacity-30 text-xs">Nenhum dispositivo bloqueado.</div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
