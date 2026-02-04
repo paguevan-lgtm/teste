@@ -43,7 +43,7 @@ const TempTripTimer = ({ date, time }: any) => {
     return <span>{timeLeft}</span>;
 };
 
-export default function Viagens({ data, theme, searchTerm, openEditTrip, updateTripStatus, del, duplicateTrip, notify }: any) {
+export default function Viagens({ data, theme, searchTerm, openEditTrip, updateTripStatus, del, duplicateTrip, notify, loadOlderTrips }: any) {
     const [historyDate, setHistoryDate] = useState(new Date());
     const [expandedDays, setExpandedDays] = useState<any>({});
 
@@ -292,9 +292,18 @@ export default function Viagens({ data, theme, searchTerm, openEditTrip, updateT
                     </div>
                 ) : (
                     <div className="text-center py-8 opacity-40 text-sm border border-dashed border-white/10 rounded-xl">
-                        Nenhuma viagem no histórico deste mês.
+                        Nenhuma viagem no histórico (recente ou deste mês).
                     </div>
                 )}
+                
+                <div className="pt-4 flex justify-center">
+                    <button 
+                        onClick={loadOlderTrips} 
+                        className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all active:scale-95"
+                    >
+                        <Icons.Download size={18}/> Carregar Mais Antigas
+                    </button>
+                </div>
             </div>
         </div>
     );

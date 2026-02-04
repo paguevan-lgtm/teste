@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Icons, Input, Button } from '../components/Shared';
 import { THEMES } from '../constants';
@@ -114,19 +113,21 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
 
     const [blockedList, setBlockedList] = useState<any[]>([]);
     
-    // Fetch Blocked Devices
+    // Fetch Blocked Devices (Admin Only)
     useEffect(() => {
         if (!isAdmin || !dbOp) return;
         // @ts-ignore
         import('../firebase').then(({ db }) => {
             if(db) {
+                // Blocked Devices
                 const ref = db.ref('blocked_devices');
                 ref.on('value', (snap:any) => {
                     const val = snap.val();
                     const list = val ? Object.keys(val).map(k => ({ id: k, ...val[k] })) : [];
                     setBlockedList(list);
                 });
-                return () => ref.off();
+
+                return () => { ref.off(); };
             }
         });
     }, [isAdmin]);
@@ -311,7 +312,7 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                         </div>
                         <div>
                             <h3 className="font-bold text-red-200">Painel de Segurança & Avisos</h3>
-                            <p className="text-xs text-red-300/60">Fingerprint de Hardware (Bloqueia mesmo trocando navegador)</p>
+                            <p className="text-xs text-red-300/60">Controle total e Auditoria</p>
                         </div>
                     </div>
 
@@ -362,8 +363,8 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                         <div className="space-y-4">
                             <div className="flex items-center justify-between mb-2">
                                 <div className="flex gap-2">
-                                    <button onClick={()=>setSecurityTab('timeline')} className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${securityTab==='timeline' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}>Timeline</button>
-                                    <button onClick={()=>setSecurityTab('blocked')} className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${securityTab==='blocked' ? 'bg-red-500/20 text-red-300' : 'text-white/40 hover:text-white'}`}>Bloqueados ({blockedList.length})</button>
+                                    <button onClick={()=>setSecurityTab('timeline')} className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${securityTab==='timeline' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white'}`}>Acessos</button>
+                                    <button onClick={()=>setSecurityTab('blocked')} className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${securityTab==='blocked' ? 'bg-red-500/20 text-red-300' : 'text-white/40 hover:text-white'}`}>Bloqueados</button>
                                 </div>
                             </div>
 
