@@ -69,14 +69,41 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
         notify("Novidade publicada com sucesso!", "success");
     };
 
+    const handleExportData = () => {
+        try {
+            const backup = {
+                passengers: data.passengers || [],
+                drivers: data.drivers || [],
+                trips: data.trips || [],
+                generatedAt: new Date().toISOString(),
+                exportedBy: user.username
+            };
+
+            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_boradevan_${getTodayDate()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            notify("Backup gerado com sucesso!", "success");
+        } catch (e) {
+            notify("Erro ao gerar backup.", "error");
+        }
+    };
+
     return (
         <div className="space-y-6 pb-20">
             
             {/* 1. PERFIL HEADER */}
             <div className={`relative overflow-hidden rounded-3xl p-6 md:p-8 border ${theme.border} shadow-2xl group stagger-in d-1`}>
                 <div className="absolute inset-0 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 opacity-90"></div>
-                <div className={`absolute top-0 right-0 p-10 opacity-10 transform rotate-12 transition-transform duration-700 group-hover:scale-110 group-hover:rotate-6`}>
-                    <Icons.Settings size={120} />
+                {/* CORREÇÃO VISUAL: Ícone reposicionado com valores negativos para efeito de watermark */}
+                <div className={`absolute -top-6 -right-6 p-0 opacity-10 transform rotate-12 transition-transform duration-700 group-hover:scale-110 group-hover:rotate-6 pointer-events-none`}>
+                    <Icons.Settings size={180} />
                 </div>
                 
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -202,6 +229,20 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                                 Salvar Chave API
                             </button>
                         </div>
+                    </div>
+
+                    {/* DADOS DO SISTEMA */}
+                    <div className={`${theme.card} p-6 rounded-2xl border ${theme.border} shadow-lg`}>
+                        <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Icons.Shield className="text-green-400"/> Dados do Sistema</h3>
+                        <p className="text-xs opacity-60 mb-4 leading-relaxed">
+                            Baixe um backup completo das suas viagens e passageiros para segurança.
+                        </p>
+                        <button 
+                            onClick={handleExportData} 
+                            className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white py-3 rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-2"
+                        >
+                            <Icons.Download size={16}/> Exportar Backup
+                        </button>
                     </div>
 
                     {/* TUTORIAL */}
