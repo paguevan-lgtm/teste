@@ -1,6 +1,5 @@
 
 export default async function handler(req, res) {
-  // Configurar CORS para a API Route (caso acesse de outro domínio, mas no mesmo domínio não precisa)
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -18,6 +17,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Chave de Acesso (Production)
   const MERCADO_PAGO_ACCESS_TOKEN = "APP_USR-2028294536116664-020323-6cd677880a20d8c24ac12a297178c743-753231933";
 
   try {
