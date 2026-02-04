@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, PropsWithChildren } from 'react';
 import { USERS_DB } from '../constants';
-import { db } from '../firebase'; // Importar DB
+import { db, auth } from '../firebase';
 
 // Tipagem do Usuário
 interface User {
@@ -24,9 +24,10 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // 1. Leitura inicial do token ao carregar a página
+    // 1. Leitura inicial do token e Auth Anônima
     useEffect(() => {
-        const loadSession = () => {
+        const initAuth = async () => {
+            // Restore Session
             try {
                 const savedSession = localStorage.getItem('nexflow_session');
                 if (savedSession) {
@@ -46,9 +47,23 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
             } finally {
                 setIsLoading(false);
             }
+
+            // Firebase Anonymous Auth (Necessário para as Regras de Segurança)
+            if (auth) {
+                auth.onAuthStateChanged((u: any) => {
+                    if (!u) {
+                        auth.signInAnonymously().catch((e: any) => {
+                            // Ignora erros de configuração se ainda não estiver ativado no console
+                            if(e.code !== 'auth/configuration-not-found' && e.code !== 'auth/operation-not-allowed') {
+                                console.error("Firebase Auth Error:", e);
+                            }
+                        });
+                    }
+                });
+            }
         };
 
-        loadSession();
+        initAuth();
     }, []);
 
     // 2. Função de Login (DB First, Fallback to Constant)
@@ -56,21 +71,30 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
         try {
             let userData: User | null = null;
 
+            // Garantir Auth Anônima antes de ler o DB (caso o useEffect não tenha terminado)
+            if (auth && !auth.currentUser) {
+                try { await auth.signInAnonymously(); } catch(e) {}
+            }
+
             // A. Verifica no Firebase Database
             if (db) {
-                const snapshot = await db.ref('users').once('value');
-                const users = snapshot.val();
-                if (users) {
-                    const foundKey = Object.keys(users).find(key => 
-                        users[key].username.toLowerCase() === u.toLowerCase() && 
-                        users[key].pass === p
-                    );
-                    if (foundKey) {
-                        userData = { 
-                            username: users[foundKey].username, 
-                            role: users[foundKey].role 
-                        };
+                try {
+                    const snapshot = await db.ref('users').once('value');
+                    const users = snapshot.val();
+                    if (users) {
+                        const foundKey = Object.keys(users).find(key => 
+                            users[key].username.toLowerCase() === u.toLowerCase() && 
+                            users[key].pass === p
+                        );
+                        if (foundKey) {
+                            userData = { 
+                                username: users[foundKey].username, 
+                                role: users[foundKey].role 
+                            };
+                        }
                     }
+                } catch (dbError) {
+                    console.error("Erro leitura login (DB):", dbError);
                 }
             }
 
@@ -85,7 +109,6 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
                 localStorage.setItem('nexflow_session', JSON.stringify({ user: userData, expiry }));
                 
                 // --- LOGGING DE ACESSO COM GEOCODIFICAÇÃO ---
-                // Executa em "background" para não travar a UI do login
                 (async () => {
                     try {
                         const logData: any = {
@@ -107,37 +130,25 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
                         // 2. Geocodificação Reversa (Coords -> Endereço)
                         if (coords && coords.latitude && coords.longitude) {
                             try {
-                                // Usa Nominatim OpenStreetMap (Gratuito)
-                                // User-Agent é obrigatório pela política de uso deles
                                 const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.latitude}&lon=${coords.longitude}`;
-                                const geoReq = await fetch(url, { 
-                                    headers: { 'User-Agent': 'BoraDeVanApp/1.0 (contato@exemplo.com)' } 
-                                });
+                                const geoReq = await fetch(url, { headers: { 'User-Agent': 'BoraDeVanApp/1.0' } });
                                 const geoRes = await geoReq.json();
 
                                 if (geoRes && geoRes.address) {
                                     logData.location = {
-                                        exact_address: geoRes.address, // Contém suburb, city, state, etc.
+                                        exact_address: geoRes.address, 
                                         display_name: geoRes.display_name,
                                         coords: { lat: coords.latitude, lng: coords.longitude }
                                     };
                                 } else {
-                                    // Fallback se a API não retornar endereço mas tivermos coords
-                                    logData.location = {
-                                        coords: { lat: coords.latitude, lng: coords.longitude }
-                                    };
+                                    logData.location = { coords: { lat: coords.latitude, lng: coords.longitude } };
                                 }
                             } catch (e) {
-                                console.warn("Erro na geocodificação:", e);
-                                // Salva pelo menos as coordenadas cruas se der erro na API
                                 logData.location = { coords: { lat: coords.latitude, lng: coords.longitude } };
                             }
                         }
 
-                        // 3. Salvar no Firebase
-                        if (db) {
-                            await db.ref('access_timeline').push(logData);
-                        }
+                        if (db) await db.ref('access_timeline').push(logData);
 
                     } catch (err) {
                         console.error("Erro fatal no logging:", err);
@@ -145,7 +156,6 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
                 })();
                 // ---------------------------------------------
 
-                // Atualiza estado IMEDIATAMENTE
                 setUser(userData);
                 return true;
             }
@@ -170,7 +180,6 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
     );
 };
 
-// Hook personalizado para usar o contexto
 export const useAuth = () => {
     const context = useContext(AuthContext);
     if (!context) {
