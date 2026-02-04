@@ -18,12 +18,10 @@ const TempTripTimer = ({ date, time }: any) => {
             
             if (isNaN(h) || isNaN(mi)) return;
 
-            // O horário de partida exato da viagem (Trip Time, que é Slot + 60)
+            // O horário recebido (time) já é Slot + 60 min (Exibido no Card).
+            // A viagem expira em Slot + 45 min.
+            // Portanto, Expiration = TripTime - 15 min.
             const tripStart = new Date(y, mo - 1, d, h, mi, 0);
-            
-            // A viagem expira 15 minutos ANTES do horário visual da viagem (que equivale a Slot + 45min)
-            // Ex: Slot 19:00. Viagem 20:00. Expira 19:45.
-            // 20:00 - 15min = 19:45.
             const expiration = new Date(tripStart.getTime() - 15 * 60000); 
             
             const now = new Date();

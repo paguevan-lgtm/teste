@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Input, Toast, Icons } from '../components/Shared';
 import { useAuth } from '../contexts/AuthContext';
 import { USERS_DB } from '../constants'; 
-import { db } from '../firebase'; // Import DB para verificação
+import { db, auth } from '../firebase';
 
 export const LoginScreen = () => {
     const { login } = useAuth(); 
@@ -55,6 +55,17 @@ export const LoginScreen = () => {
 
         // B. Verificação no Banco de Dados (Firebase)
         if (!userExists && db) {
+            // FIX: Ensure Auth is active to satisfy DB rules (read auth != null)
+            if (auth && !auth.currentUser) {
+                try {
+                    await auth.signInAnonymously();
+                } catch (e: any) {
+                    if (e.code !== 'auth/configuration-not-found' && e.code !== 'auth/operation-not-allowed') {
+                        console.error("Auth Error (PreLogin):", e);
+                    }
+                }
+            }
+
             try {
                 const snapshot = await db.ref('users').once('value');
                 const users = snapshot.val();

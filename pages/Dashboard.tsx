@@ -186,6 +186,9 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
         return <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">{items}</div>;
     };
 
+    const innerBg = theme.inner || 'bg-black/20';
+    const ghostBg = theme.ghost || 'hover:bg-white/5';
+
     return (
         <div className="space-y-8 pb-10 relative">
             
@@ -209,15 +212,15 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
                 <div className="absolute top-[-40px] right-0 z-50">
                     <button 
                         onClick={() => setShowThemeControl(!showThemeControl)} 
-                        className="text-[10px] bg-white/5 hover:bg-white/10 px-2 py-1 rounded-full border border-white/10 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity"
+                        className={`text-[10px] px-2 py-1 rounded-full border border-white/10 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity ${innerBg}`}
                     >
                         <Icons.Stars size={10}/> Themes
                     </button>
                     {showThemeControl && (
                         <div className={`absolute top-8 right-0 ${theme.card} border ${theme.border} p-2 rounded-xl shadow-xl w-40 flex flex-col gap-1 z-50`}>
-                            <button onClick={() => setFestiveTheme(null)} className="text-xs p-2 hover:bg-white/10 rounded text-left">Padrão</button>
+                            <button onClick={() => setFestiveTheme(null)} className={`text-xs p-2 rounded text-left ${ghostBg}`}>Padrão</button>
                             {Object.values(THEME_CONFIGS).map((t:any) => (
-                                <button key={t.id} onClick={() => setFestiveTheme(t.id)} className="text-xs p-2 hover:bg-white/10 rounded text-left flex items-center gap-2">
+                                <button key={t.id} onClick={() => setFestiveTheme(t.id)} className={`text-xs p-2 rounded text-left flex items-center gap-2 ${ghostBg}`}>
                                     {t.icon} {t.name.split(' ')[0]}
                                 </button>
                             ))}
@@ -247,7 +250,8 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
                     <div className="flex-1 w-full min-w-0">
                         {/* Wrapper para garantir que o ícone fique alinhado ao topo, à direita do texto */}
                         <div className="flex justify-between items-start mb-3 gap-2">
-                            <h1 className="text-3xl md:text-4xl font-black tracking-tight text-white drop-shadow-md leading-tight max-w-[85%]">
+                            {/* FIX: Usar text-current ou theme.text em vez de text-white para suportar temas claros */}
+                            <h1 className="text-3xl md:text-4xl font-black tracking-tight drop-shadow-md leading-tight max-w-[85%] text-white mix-blend-hard-light">
                                 {greeting}
                             </h1>
                             {activeFestive && <div className="animate-bounce-in filter drop-shadow-lg shrink-0 pt-1">{activeFestive.icon}</div>}
@@ -258,10 +262,10 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
                             {activeFestive ? (
                                 <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 bg-white/10 border border-white/20 px-3 py-1.5 rounded-xl shadow-sm backdrop-blur-md max-w-full">
                                     <span className="text-xs md:text-sm font-bold text-white leading-tight">{activeFestive.phrase}</span>
-                                    <span className="text-[10px] uppercase font-bold opacity-60 border-l border-white/30 pl-2 tracking-wider whitespace-nowrap">{activeFestive.range}</span>
+                                    <span className="text-[10px] uppercase font-bold opacity-60 border-l border-white/30 pl-2 tracking-wider whitespace-nowrap text-white">{activeFestive.range}</span>
                                 </div>
                             ) : (
-                                <div className="flex items-center gap-2 text-white/60 font-medium text-sm">
+                                <div className="flex items-center gap-2 font-medium text-sm text-white/80">
                                     <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.5)]"></span>
                                     <span>{motivational}</span>
                                 </div>
@@ -271,8 +275,8 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
                     
                     {/* Widgets Section - Right (Bottom on Mobile) */}
                     <div className="grid grid-cols-2 gap-3 w-full md:w-auto md:min-w-[340px]">
-                        <ClockWidget theme={{...theme, card: `bg-black/20 border-white/10 h-full min-h-[90px] flex flex-col justify-between`}} />
-                        <WeatherWidget theme={{...theme, card: `bg-black/20 border-white/10 h-full min-h-[90px] flex flex-col justify-between`}} />
+                        <ClockWidget theme={{...theme, card: `${innerBg} border ${theme.border} h-full min-h-[90px] flex flex-col justify-between`, inner: 'bg-white/10'}} />
+                        <WeatherWidget theme={{...theme, card: `${innerBg} border ${theme.border} h-full min-h-[90px] flex flex-col justify-between`, inner: 'bg-white/10'}} />
                     </div>
                 </div>
             </div>
@@ -281,23 +285,23 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 stagger-in d-2">
                 <button 
                     onClick={()=>{setAiModal(true)}} 
-                    className="col-span-2 md:col-span-2 bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-500 hover:to-orange-600 p-4 rounded-2xl shadow-lg flex items-center justify-center gap-3 transition-all transform hover:scale-[1.02] active:scale-[0.98] group border border-white/10"
+                    className="col-span-2 md:col-span-2 bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-500 hover:to-orange-600 p-4 rounded-2xl shadow-lg flex items-center justify-center gap-3 transition-all transform hover:scale-[1.02] active:scale-[0.98] group border border-white/10 text-white"
                 >
                     <div className="bg-white/20 p-2 rounded-full group-hover:rotate-12 transition-transform"><Icons.Stars size={24} className="text-white"/></div>
                     <div className="text-left">
-                        <div className="font-bold text-white text-lg leading-none">Cadastro Mágico</div>
-                        <div className="text-white/60 text-xs">Usar Inteligência Artificial</div>
+                        <div className="font-bold text-lg leading-none">Cadastro Mágico</div>
+                        <div className="opacity-80 text-xs">Usar Inteligência Artificial</div>
                     </div>
                 </button>
 
-                <button onClick={()=>{onOpenModal('newPax')}} className={`${theme.card} p-4 rounded-2xl border ${theme.border} hover:bg-white/5 transition-all flex items-center gap-3 group active:scale-95`}>
+                <button onClick={()=>{onOpenModal('newPax')}} className={`${theme.card} p-4 rounded-2xl border ${theme.border} ${ghostBg} transition-all flex items-center gap-3 group active:scale-95`}>
                     <div className="bg-blue-500/20 p-2 rounded-xl text-blue-400 group-hover:scale-110 transition-transform"><Icons.Users size={20}/></div>
                     <div className="text-left">
                         <div className="font-bold text-sm">Novo Passageiro</div>
                     </div>
                 </button>
 
-                <button onClick={()=>{onOpenModal('newTrip')}} className={`${theme.card} p-4 rounded-2xl border ${theme.border} hover:bg-white/5 transition-all flex items-center gap-3 group active:scale-95`}>
+                <button onClick={()=>{onOpenModal('newTrip')}} className={`${theme.card} p-4 rounded-2xl border ${theme.border} ${ghostBg} transition-all flex items-center gap-3 group active:scale-95`}>
                     <div className="bg-green-500/20 p-2 rounded-xl text-green-400 group-hover:scale-110 transition-transform"><Icons.Van size={20}/></div>
                     <div className="text-left">
                         <div className="font-bold text-sm">Nova Viagem</div>
@@ -311,7 +315,8 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
                     <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity transform group-hover:scale-110 duration-500"><Icons.Users size={80}/></div>
                     <div className="relative z-10">
                         <div className="text-blue-400 font-bold uppercase tracking-wider text-xs mb-1">Base de Passageiros</div>
-                        <div className="text-4xl font-black text-white">{data.passengers.length}</div>
+                        {/* Fix: removed text-white for theme.text */}
+                        <div className="text-4xl font-black">{data.passengers.length}</div>
                         <div className="text-xs opacity-50 mt-2 flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div> Cadastrados</div>
                     </div>
                 </div>
@@ -320,17 +325,17 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
                     <div className="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity transform group-hover:scale-110 duration-500"><Icons.Map size={80}/></div>
                     <div className="relative z-10">
                         <div className="text-amber-400 font-bold uppercase tracking-wider text-xs mb-1">Total de Viagens</div>
-                        <div className="text-4xl font-black text-white">{data.trips.length}</div>
+                        <div className="text-4xl font-black">{data.trips.length}</div>
                         <div className="text-xs opacity-50 mt-2 flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-amber-500"></div> Realizadas</div>
                     </div>
                 </div>
 
                 {canSeeRevenue && (
-                    <div className={`${theme.card} p-5 rounded-2xl border ${theme.border} relative overflow-hidden group premium-card bg-green-900/10 border-green-500/20`}>
+                    <div className={`${theme.card} p-5 rounded-2xl border ${theme.border} relative overflow-hidden group premium-card bg-green-500/5 border-green-500/20`}>
                         <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Icons.Dollar size={80}/></div>
                         <div className="relative z-10">
                             <div className="text-green-400 font-bold uppercase tracking-wider text-xs mb-1">Estimativa Hoje</div>
-                            <div className="text-4xl font-black text-white">R$ {stats.revenue},00</div>
+                            <div className="text-4xl font-black">R$ {stats.revenue},00</div>
                             <div className="text-xs opacity-50 mt-2 flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500"></div> Calculado sobre viagens</div>
                         </div>
                     </div>
@@ -363,7 +368,7 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
                 
                 <div className="flex gap-2 mb-4">
                     <input 
-                        className="flex-1 bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-white/30 transition-all" 
+                        className={`flex-1 border px-4 py-3 text-sm outline-none focus:border-current transition-all ${theme.radius} ${innerBg} ${theme.border}`}
                         placeholder="Digite um lembrete rápido..." 
                         value={noteText} 
                         onChange={e=>setNoteText(e.target.value)} 
@@ -374,7 +379,7 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
                     {userNotes.length > 0 ? userNotes.map((note:any) => (
-                        <div key={note.id} className="flex justify-between items-start bg-white/5 p-3 rounded-xl text-sm border border-white/5 hover:border-white/10 transition-colors group">
+                        <div key={note.id} className={`flex justify-between items-start ${ghostBg} p-3 rounded-xl text-sm border ${theme.border} transition-colors group`}>
                             <span className="flex-1 break-words leading-relaxed opacity-90">{note.text}</span>
                             <button 
                                 onClick={(e) => { 
@@ -389,7 +394,7 @@ export default function Dashboard({ data, theme, setView, onOpenModal, dbOp, set
                             </button>
                         </div>
                     )) : (
-                        <div className="col-span-2 text-center py-8 opacity-30 text-sm border-2 border-dashed border-white/5 rounded-xl">
+                        <div className="col-span-2 text-center py-8 opacity-30 text-sm border-2 border-dashed border-current rounded-xl">
                             Nenhum lembrete anotado.
                         </div>
                     )}
