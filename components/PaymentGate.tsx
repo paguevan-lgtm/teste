@@ -66,7 +66,9 @@ export const PaymentGate = ({ user, children }: any) => {
                 external_reference: `sub_${Date.now()}`
             };
 
-            // Call local API route instead of Mercado Pago directly
+            // Call local API route
+            // Nota: Se estiver em localhost, isso procura http://localhost:3000/api/create_payment
+            // No Vercel, procura o endpoint serverless.
             const response = await fetch("/api/create_payment", {
                 method: "POST",
                 headers: {
@@ -76,9 +78,9 @@ export const PaymentGate = ({ user, children }: any) => {
                 body: JSON.stringify(paymentData)
             });
 
-            // Handle potential HTML response (404/500 from Vercel)
+            // Check content type to avoid JSON parse errors on HTML error pages
             const contentType = response.headers.get("content-type");
-            if (contentType && contentType.indexOf("application/json") !== -1) {
+            if (contentType && contentType.includes("application/json")) {
                 const data = await response.json();
                 
                 if (data.status === 'pending' || data.status === 'created') {
@@ -91,22 +93,23 @@ export const PaymentGate = ({ user, children }: any) => {
                         // Start Polling for approval immediately
                         startPolling(data.id);
                     } else {
-                        alert("Erro ao gerar QR Code. Tente novamente.");
+                        alert("Erro ao gerar QR Code. Resposta inválida da API.");
                     }
                 } else {
                     console.error("Payment Error:", data);
-                    alert("Erro ao criar pagamento: " + (data.message || 'Erro desconhecido na API'));
+                    alert("Erro ao criar pagamento: " + (data.message || 'Erro desconhecido.'));
                 }
             } else {
-                // Not JSON (Likely 404 HTML)
+                // Se chegou aqui, o servidor retornou algo que não é JSON (provavelmente HTML de erro 404/500/405)
+                console.error("Non-JSON response", response.status, response.statusText);
                 const text = await response.text();
-                console.error("Non-JSON API Response:", text);
-                alert("Erro de sistema: API de pagamento não encontrada (404). Verifique se os arquivos /api/create_payment.js existem e se o Vercel está configurado.");
+                console.log("Response text:", text); // Para debug no console
+                alert(`Erro de conexão com o servidor de pagamento (Status: ${response.status}). Tente recarregar a página.`);
             }
 
         } catch (error) {
             console.error(error);
-            alert("Erro de conexão com servidor de pagamento.");
+            alert("Erro fatal ao tentar conectar com o pagamento.");
         } finally {
             setVerifying(false);
         }
@@ -120,7 +123,7 @@ export const PaymentGate = ({ user, children }: any) => {
                 
                 // Handle JSON check
                 const contentType = response.headers.get("content-type");
-                if (contentType && contentType.indexOf("application/json") !== -1) {
+                if (contentType && contentType.includes("application/json")) {
                     const data = await response.json();
                     
                     if (data.status === 'approved') {
