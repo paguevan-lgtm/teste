@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, PropsWithChildren } from 'react';
 import { USERS_DB } from '../constants';
 import { db, auth } from '../firebase';
-import { getDeviceFingerprint, parseUserAgent } from '../utils';
+import { getDeviceFingerprint, parseUserAgent, getHardwareInfo } from '../utils';
 
 // Tipagem do Usuário
 interface User {
@@ -114,7 +114,7 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
     // 2. Função de Login (DB First, Fallback to Constant)
     const login = async (u: string, p: string, coords: any): Promise<boolean> => {
         try {
-            // --- SECURITY CHECK (FINGERPRINT) ---
+            // --- SECURITY CHECK (FINGERPRINT ROBUSTO) ---
             const deviceId = await getDeviceFingerprint();
             
             // Verifica se está na lista de bloqueados
@@ -122,7 +122,6 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
                 const blockedSnap = await db.ref(`blocked_devices/${deviceId}`).once('value');
                 if (blockedSnap.exists()) {
                     // SILENT FAIL: Não mostra alerta, apenas retorna false.
-                    // O usuário achará que a senha está errada ou o sistema falhou.
                     return false;
                 }
             }
@@ -170,13 +169,16 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
                 // --- LOGGING DE ACESSO COM GEOCODIFICAÇÃO E FINGERPRINT ---
                 (async () => {
                     try {
+                        const uaInfo = parseUserAgent(navigator.userAgent);
+                        const gpuInfo = getHardwareInfo();
+
                         const logData: any = {
                             username: userData.username,
                             timestamp: Date.now(),
                             ip: 'Detectando...',
                             device: navigator.userAgent,
-                            deviceId: deviceId, // SAVING FINGERPRINT ID
-                            deviceInfo: parseUserAgent(navigator.userAgent)
+                            deviceId: deviceId, 
+                            deviceInfo: { ...uaInfo, gpu: gpuInfo } // Adds GPU info to logs
                         };
 
                         // 1. Obter IP Público
