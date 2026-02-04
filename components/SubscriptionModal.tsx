@@ -14,10 +14,14 @@ export const SubscriptionModal = ({ theme, user, onUnlock }: any) => {
         let interval: any;
         if (step === 'payment' && paymentData?.id) {
             interval = setInterval(async () => {
-                const status = await checkPaymentStatus(paymentData.id);
-                if (status === 'approved') {
-                    clearInterval(interval);
-                    handleSuccess();
+                try {
+                    const status = await checkPaymentStatus(paymentData.id);
+                    if (status === 'approved') {
+                        clearInterval(interval);
+                        handleSuccess();
+                    }
+                } catch(e) {
+                    console.error("Error checking status", e);
                 }
             }, 5000); // Check every 5 seconds
         }
@@ -41,13 +45,16 @@ export const SubscriptionModal = ({ theme, user, onUnlock }: any) => {
     const handleSuccess = () => {
         // Atualiza o banco de dados globalmente para desbloquear TODOS
         const expiresAt = Date.now() + (30 * 24 * 60 * 60 * 1000); // +30 dias
-        db.ref('system_status/subscription').set({
-            isActive: true,
-            expiresAt: expiresAt,
-            lastPaymentBy: user.username,
-            paidAt: Date.now()
-        });
+        if (db) {
+            db.ref('system_status/subscription').set({
+                isActive: true,
+                expiresAt: expiresAt,
+                lastPaymentBy: user?.username || 'Unknown',
+                paidAt: Date.now()
+            });
+        }
         // onUnlock será chamado automaticamente via listener no App.tsx
+        if(onUnlock) onUnlock();
     };
 
     const copyPix = () => {
@@ -59,7 +66,7 @@ export const SubscriptionModal = ({ theme, user, onUnlock }: any) => {
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-lg p-4 animate-fade-in">
-            <div className={`w-full max-w-md ${theme.card} border-2 border-red-500 rounded-2xl shadow-2xl overflow-hidden relative`}>
+            <div className={`w-full max-w-md ${theme?.card || 'bg-slate-800'} border-2 border-red-500 rounded-2xl shadow-2xl overflow-hidden relative`}>
                 
                 {/* Header Lock */}
                 <div className="bg-red-600 p-4 flex items-center justify-center">
@@ -68,10 +75,10 @@ export const SubscriptionModal = ({ theme, user, onUnlock }: any) => {
                     </div>
                 </div>
 
-                <div className="p-6 text-center">
+                <div className="p-6 text-center text-white">
                     {step === 'offer' && (
                         <>
-                            <h2 className="text-2xl font-black mb-2 text-white">Sistema Bloqueado</h2>
+                            <h2 className="text-2xl font-black mb-2">Sistema Bloqueado</h2>
                             <p className="text-sm opacity-80 mb-6 leading-relaxed">
                                 A mensalidade do sistema venceu. Para continuar utilizando todos os recursos, é necessário realizar o pagamento.
                                 <br/><br/>
