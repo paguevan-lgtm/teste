@@ -251,65 +251,108 @@ const cyrb53 = (str: string, seed = 0) => {
 
 export const getDeviceFingerprint = async () => {
     try {
-        // 1. Basic Info
         const nav = window.navigator;
         const screen = window.screen;
+
+        // 1. GPU (WebGL) - ANCORA DE HARDWARE
+        // Identifica a placa de vídeo física, que é imutável entre navegadores.
+        const getWebGL = () => {
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (!gl) return 'no_webgl';
+                // @ts-ignore
+                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                // @ts-ignore
+                const renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : 'unknown_renderer';
+                // @ts-ignore
+                const vendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : 'unknown_vendor';
+                return `${vendor}::${renderer}`;
+            } catch (e) { return 'webgl_error'; }
+        };
+
+        // 2. OS Identification (Regex rigoroso)
+        // Ignora versão do browser (Chrome/120 vs Edge/120) mas pega o OS base.
+        const getOS = () => {
+            const ua = nav.userAgent;
+            if (ua.indexOf("Win") !== -1) return "Windows";
+            if (ua.indexOf("Mac") !== -1) return "MacOS";
+            if (ua.indexOf("Linux") !== -1) return "Linux";
+            if (ua.indexOf("Android") !== -1) return "Android";
+            if (ua.indexOf("iOS") !== -1) return "iOS";
+            return "UnknownOS";
+        };
+
+        // 3. Hardware Specs (Núcleos + RAM + Resolução + Cores)
+        // @ts-ignore
+        const cores = nav.hardwareConcurrency || 'x';
+        // @ts-ignore
+        const ram = nav.deviceMemory || 'x';
+        const screenSpec = `${screen.width}x${screen.height}x${screen.colorDepth}`;
         
-        let data = [
-            nav.userAgent,
-            nav.language,
-            screen.colorDepth,
-            screen.width + 'x' + screen.height,
-            new Date().getTimezoneOffset(),
-            'sessionStorage' in window,
-            'localStorage' in window,
+        // 4. Timezone
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown_tz';
+
+        // COMPOSIÇÃO DO FINGERPRINT
+        // Não incluímos o UserAgent completo para evitar que a mudança de navegador altere o hash.
+        // Baseamos apenas em características físicas e de sistema operacional.
+        const hardwareString = [
+            getOS(),
             // @ts-ignore
             nav.platform,
-            // @ts-ignore
-            nav.hardwareConcurrency,
-            // @ts-ignore
-            nav.deviceMemory
-        ].join('|');
+            cores,
+            ram,
+            screenSpec,
+            tz,
+            getWebGL()
+        ].join('|||');
 
-        // 2. Canvas Fingerprint
-        try {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-                canvas.width = 200;
-                canvas.height = 50;
-                ctx.textBaseline = "top";
-                ctx.font = "14px 'Arial'";
-                ctx.fillStyle = "#f60";
-                ctx.fillRect(125,1,62,20);
-                ctx.fillStyle = "#069";
-                ctx.fillText("BoraDeVan_FP,123", 2, 15);
-                ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
-                ctx.fillText("BoraDeVan_FP,123", 4, 17);
-                data += '|' + canvas.toDataURL();
-            }
-        } catch(e) { /* ignore canvas error */ }
-
-        // 3. Hash it
-        return cyrb53(data).toString(16);
+        return cyrb53(hardwareString).toString(16);
     } catch (e) {
-        return 'unknown_device';
+        return 'fallback_id_' + Date.now();
     }
 };
 
+// Extrator de detalhes para exibição (Log)
 export const parseUserAgent = (ua: string) => {
     let device = 'Desktop';
     let browser = 'Unknown';
+    let os = 'Unknown OS';
     
+    // Device
     if (/mobile/i.test(ua)) device = 'Mobile';
     if (/tablet/i.test(ua)) device = 'Tablet';
     if (/iphone/i.test(ua)) device = 'iPhone';
     if (/android/i.test(ua)) device = 'Android';
     
-    if (/chrome/i.test(ua)) browser = 'Chrome';
+    // Browser
+    if (/edg/i.test(ua)) browser = 'Edge';
+    else if (/chrome/i.test(ua)) browser = 'Chrome';
     else if (/firefox/i.test(ua)) browser = 'Firefox';
     else if (/safari/i.test(ua)) browser = 'Safari';
-    else if (/edge/i.test(ua)) browser = 'Edge';
     
-    return { device, browser };
+    // OS
+    if (/windows/i.test(ua)) os = 'Windows';
+    else if (/mac os/i.test(ua)) os = 'MacOS';
+    else if (/linux/i.test(ua)) os = 'Linux';
+    else if (/android/i.test(ua)) os = 'Android';
+    else if (/ios/i.test(ua)) os = 'iOS';
+    
+    return { device, browser, os };
 };
+
+// Helper para obter Hardware Info legível (para logs)
+export const getHardwareInfo = () => {
+    try {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        let gpu = 'Unknown GPU';
+        if (gl) {
+            // @ts-ignore
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            // @ts-ignore
+            if(debugInfo) gpu = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+        }
+        return gpu;
+    } catch(e) { return 'Unknown GPU'; }
+}
