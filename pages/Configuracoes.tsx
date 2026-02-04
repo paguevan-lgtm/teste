@@ -97,7 +97,7 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
 
     const banDevice = (deviceId: string, reason: string) => {
         if (!deviceId) return;
-        requestConfirm("Banir Dispositivo?", "Este aparelho não conseguirá mais fazer login, mesmo trocando de IP.", () => {
+        requestConfirm("Banir Dispositivo?", "Este aparelho não conseguirá mais fazer login, mesmo trocando de IP. Se ele estiver logado, cairá imediatamente.", () => {
             dbOp('update', `blocked_devices/${deviceId}`, { 
                 reason, 
                 blockedBy: user.username,
@@ -108,21 +108,12 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
 
     const unbanDevice = (deviceId: string) => {
         requestConfirm("Desbloquear?", "O aparelho voltará a ter acesso.", () => {
-            dbOp('delete', `blocked_devices/${deviceId}`, null);
+            // CORREÇÃO: Passar a coleção e o ID separadamente para o dbOp('delete') funcionar
+            dbOp('delete', 'blocked_devices', deviceId);
         });
     };
 
-    // Prepare Blocked List
-    const blockedDevicesList = useState([]);
-    useEffect(() => {
-       // Using raw data from props, usually we'd pass blocked_devices explicitly or use db listener
-       // Assuming dbOp works directly, we need to fetch this list or rely on `data` having it if `App.tsx` fetches it.
-       // App.tsx currently fetches `blocked_ips`. Let's assume we need to use `data.blocked_devices` if added, 
-       // but for now let's modify the UI to use whatever data source is available or create a local listener.
-       // Since I cannot modify App.tsx to fetch `blocked_devices` in this turn easily without outputting App.tsx again,
-       // I'll rely on the existing prop structure but fetch blocked devices manually here for Admin.
-    }, []);
-
+    // Prepare Blocked List Logic
     // NOTE: In a real scenario, I'd update App.tsx to fetch 'blocked_devices'. 
     // Here I will use a direct DB listener for the admin panel inside the component.
     const [blockedList, setBlockedList] = useState<any[]>([]);
