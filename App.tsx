@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db, auth } from './firebase';
 import { THEMES, INITIAL_SP_LIST, BAIRROS } from './constants';
@@ -609,28 +608,27 @@ const AppContent = () => {
                         String(slotDate.getDate()).padStart(2, '0')
                     ].join('-');
 
-                    // Check if trip exists for THIS driver on THIS date
+                    // CORREÇÃO: Calcular Data Final da Viagem ANTES de checar existência
+                    const tripTime = addMinutes(slot.time, 60);
+                    const [sH] = slot.time.split(':').map(Number);
+                    const [tH] = tripTime.split(':').map(Number);
+                    
+                    let finalTripDate = slotDateStr;
+                    // Se a viagem cruzar a meia noite (Ex: Slot 23:30 -> Trip 00:30), a data avança
+                    if (tH < sH) {
+                         finalTripDate = dateAddDays(slotDateStr, 1);
+                    }
+
+                    // Check if trip exists for THIS driver on THIS *FINAL* date
                     const exists = data.trips.some((t:any) => 
                         t.driverId === driverDb.id && 
-                        t.date === slotDateStr &&
+                        t.date === finalTripDate && // Usar a data CALCULADA, não a data do slot
                         (t.isTemp || t.status !== 'Cancelada')
                     );
 
                     if (!exists) {
                         currentMaxId++;
                         const nextId = currentMaxId.toString();
-                        
-                        // Trip time set to +60 mins from Slot Time (User Request)
-                        const tripTime = addMinutes(slot.time, 60);
-                        
-                        const [sH] = slot.time.split(':').map(Number);
-                        const [tH] = tripTime.split(':').map(Number);
-                        
-                        // Adjust date if trip time crosses midnight relative to slot (e.g. 23:30 -> 00:30)
-                        let finalTripDate = slotDateStr;
-                        if (tH < sH) {
-                             finalTripDate = dateAddDays(slotDateStr, 1);
-                        }
 
                         const newTrip = {
                             id: nextId, 
