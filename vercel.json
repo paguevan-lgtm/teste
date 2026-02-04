@@ -2,8 +2,12 @@
 {
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "source": "/api/create_payment",
+      "destination": "/api/create_payment.ts"
+    },
+    {
+      "source": "/api/check_payment",
+      "destination": "/api/check_payment.ts"
     },
     {
       "source": "/(.*)",
