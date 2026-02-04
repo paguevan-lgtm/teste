@@ -1,4 +1,5 @@
 
+
 export interface Passenger {
     id: string;
     name: string;
@@ -85,4 +86,9 @@ export interface Theme {
 export interface User {
     username: string;
     role: string;
+}
+
+export interface Subscription {
+    status: 'active' | 'expired';
+    expiry: number; // Timestamp
 }

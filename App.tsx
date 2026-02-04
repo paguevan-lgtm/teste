@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db, auth } from './firebase';
 import { THEMES, INITIAL_SP_LIST, BAIRROS } from './constants';
@@ -5,7 +6,7 @@ import { Icons, Toast, ConfirmModal, CommandPalette, QuickCalculator } from './c
 import { TourGuide } from './components/Tour';
 import { LoginScreen } from './pages/Login';
 import { getTodayDate, getOperationalDate, getLousaDate, generateUniqueId, callGemini, getAvatarUrl, getBairroIdx, formatDisplayDate, dateAddDays, addMinutes } from './utils';
-import { SubscriptionModal } from './components/SubscriptionModal';
+import { PaymentGate } from './components/PaymentGate';
 
 // Context Auth
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -99,9 +100,6 @@ const AppContent = () => {
     // Notificações e Confirmações
     const [notification, setNotification] = useState({ message: '', type: 'info', visible: false });
     const [confirmState, setConfirmState] = useState<any>({ isOpen: false, title: '', message: '', onConfirm: () => {}, type: 'danger' });
-
-    // PAYWALL STATE - Default Locked (True) unless Breno
-    const [isSystemLocked, setIsSystemLocked] = useState(true); // Padrão: BLOQUEADO
 
     // Tour
     const [runTour, setRunTour] = useState(false);
@@ -286,38 +284,6 @@ const AppContent = () => {
             }
         }
     }, [data.newsletter, user]);
-
-    // PAYWALL / MENSALIDADE LISTENER
-    useEffect(() => {
-        // Se usuário não está carregado, não faz nada
-        if (!user) return;
-
-        // Se for o Breno (case insensitive), libera imediatamente
-        if (user.username.toLowerCase() === 'breno') {
-            setIsSystemLocked(false);
-            return;
-        }
-
-        // Para outros usuários, escuta o banco de dados
-        if (db) {
-            const subRef = db.ref('system_status/subscription');
-            const subCb = subRef.on('value', (snap: any) => {
-                const val = snap.val();
-                if (val) {
-                    const now = Date.now();
-                    if (val.isActive && val.expiresAt > now) {
-                        setIsSystemLocked(false); // Assinatura válida
-                    } else {
-                        setIsSystemLocked(true); // Expirada ou Inativa
-                    }
-                } else {
-                    // Se não existe registro, bloqueia por padrão
-                    setIsSystemLocked(true);
-                }
-            });
-            return () => subRef.off('value', subCb);
-        }
-    }, [db, user, isFireConnected]);
 
     const markNewsAsSeen = () => {
         if (latestNews && user) localStorage.setItem(`last_news_seen_${user.username}`, latestNews.id);
@@ -755,131 +721,132 @@ const AppContent = () => {
              onTouchEnd={handleGlobalTouchEnd}
              onContextMenu={(e) => { e.preventDefault(); setCmdOpen(true); }} 
         >
-             {isSystemLocked && <SubscriptionModal theme={theme} user={user} onUnlock={() => setIsSystemLocked(false)} />}
-
              <Toast message={notification.message} type={notification.type} visible={notification.visible} />
              <ConfirmModal isOpen={confirmState.isOpen} title={confirmState.title} message={confirmState.message} onConfirm={confirmState.onConfirm} onCancel={() => setConfirmState((prev:any) => ({ ...prev, isOpen: false }))} type={confirmState.type} theme={theme} />
              
              <CommandPalette isOpen={cmdOpen} onClose={() => setCmdOpen(false)} theme={theme} actions={commandActions} />
              <QuickCalculator isOpen={calcOpen} onClose={() => setCalcOpen(false)} theme={theme} />
 
-             <Sidebar 
-                theme={theme} 
-                view={view} 
-                setView={setView} 
-                menuOpen={menuOpen} 
-                setMenuOpen={setMenuOpen} 
-                user={user} 
-                orderedMenuItems={orderedMenuItems}
-                handleMenuDragStart={handleMenuDragStart}
-                handleMenuDragOver={handleMenuDragOver}
-                handleMenuDrop={handleMenuDrop}
-                draggedMenuIndex={draggedMenuIndex}
-             />
+             {/* WRAPPING THE ENTIRE APP CONTENT WITH THE SECURE PAYMENT GATE */}
+             <PaymentGate user={user}>
+                <Sidebar 
+                    theme={theme} 
+                    view={view} 
+                    setView={setView} 
+                    menuOpen={menuOpen} 
+                    setMenuOpen={setMenuOpen} 
+                    user={user} 
+                    orderedMenuItems={orderedMenuItems}
+                    handleMenuDragStart={handleMenuDragStart}
+                    handleMenuDragOver={handleMenuDragOver}
+                    handleMenuDrop={handleMenuDrop}
+                    draggedMenuIndex={draggedMenuIndex}
+                />
 
-             <div className={`flex-1 flex flex-col h-full min-w-0 ${theme.contentBg || 'bg-black/20'}`}>
-                <div className={`h-16 flex items-center justify-between px-4 md:px-8 border-b ${theme.border} bg-opacity-80 backdrop-blur-md z-30 flex-shrink-0`}>
-                    <div className="flex items-center gap-4 flex-1">
-                        <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 -ml-2"><Icons.Menu size={24} /></button>
-                        <h2 className={`font-bold text-lg md:text-xl truncate ${['passengers', 'drivers', 'trips', 'achados', 'lostFound'].includes(view) && searchTerm ? 'hidden md:block' : 'block'}`}>{orderedMenuItems.find(i=>i.id===view)?.l || 'Bora de Van'}</h2>
-                        {['passengers', 'drivers', 'trips', 'achados', 'lostFound'].includes(view) && (<div className="flex-1 max-w-md ml-auto md:ml-4"><div className="relative group"><div className="absolute inset-y-0 left-0 pl-3 flex items-center opacity-50"><Icons.Search size={16} /></div><input type="text" placeholder={`Pesquisar...`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full ${theme.inner} border ${theme.border} rounded-xl py-2 pl-10 pr-4 text-sm outline-none ${theme.text}`}/>{searchTerm && (<button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-0 pr-3 flex items-center opacity-50"><Icons.X size={14} /></button>)}</div></div>)}
+                <div className={`flex-1 flex flex-col h-full min-w-0 ${theme.contentBg || 'bg-black/20'}`}>
+                    <div className={`h-16 flex items-center justify-between px-4 md:px-8 border-b ${theme.border} bg-opacity-80 backdrop-blur-md z-30 flex-shrink-0`}>
+                        <div className="flex items-center gap-4 flex-1">
+                            <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 -ml-2"><Icons.Menu size={24} /></button>
+                            <h2 className={`font-bold text-lg md:text-xl truncate ${['passengers', 'drivers', 'trips', 'achados', 'lostFound'].includes(view) && searchTerm ? 'hidden md:block' : 'block'}`}>{orderedMenuItems.find(i=>i.id===view)?.l || 'Bora de Van'}</h2>
+                            {['passengers', 'drivers', 'trips', 'achados', 'lostFound'].includes(view) && (<div className="flex-1 max-w-md ml-auto md:ml-4"><div className="relative group"><div className="absolute inset-y-0 left-0 pl-3 flex items-center opacity-50"><Icons.Search size={16} /></div><input type="text" placeholder={`Pesquisar...`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full ${theme.inner} border ${theme.border} rounded-xl py-2 pl-10 pr-4 text-sm outline-none ${theme.text}`}/>{searchTerm && (<button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-0 pr-3 flex items-center opacity-50"><Icons.X size={14} /></button>)}</div></div>)}
+                        </div>
+                        <div className="flex gap-2 ml-2">
+                            <button onClick={() => setCmdOpen(true)} className={`p-2.5 rounded-xl ${theme.ghost || 'bg-white/5 hover:bg-white/10 text-white/50'} hidden md:flex items-center gap-2 text-xs font-bold border ${theme.divider || 'border-white/5'} mr-2`} title="Command Palette">
+                                <Icons.Command size={14} /> <span className="opacity-50">CTRL+K</span>
+                            </button>
+                            {view !== 'lostFound' && view !== 'trips' && view !== 'dashboard' && view !== 'settings' && view !== 'billing' && <button onClick={()=>setFilterStatus(filterStatus==='Ativo'?'Todos':'Ativo')} className={`p-2 rounded-lg ${filterStatus==='Ativo'?theme.accent:'opacity-50'}`}><Icons.Refresh size={20}/></button>}
+                            <button onClick={()=>{ if(view==='passengers') { setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount:0, date:getTodayDate(), time: ''}); setModal('passenger'); } else if(view==='trips') { setSuggestedTrip(null); setEditingTripId(null); setModal('trip'); } else if(view==='lostFound') { setFormData({date: getTodayDate(), status: 'Pendente'}); setModal('lostFound'); } else if(view==='drivers') { setFormData({status: 'Ativo'}); setModal('driver'); } else { setSuggestedTrip(null); setEditingTripId(null); setModal('trip'); } }} className={`${theme.primary} p-2.5 rounded-xl shadow-lg active:scale-95`}><Icons.Plus/></button>
+                        </div>
                     </div>
-                    <div className="flex gap-2 ml-2">
-                        <button onClick={() => setCmdOpen(true)} className={`p-2.5 rounded-xl ${theme.ghost || 'bg-white/5 hover:bg-white/10 text-white/50'} hidden md:flex items-center gap-2 text-xs font-bold border ${theme.divider || 'border-white/5'} mr-2`} title="Command Palette">
-                            <Icons.Command size={14} /> <span className="opacity-50">CTRL+K</span>
-                        </button>
-                        {view !== 'lostFound' && view !== 'trips' && view !== 'dashboard' && view !== 'settings' && view !== 'billing' && <button onClick={()=>setFilterStatus(filterStatus==='Ativo'?'Todos':'Ativo')} className={`p-2 rounded-lg ${filterStatus==='Ativo'?theme.accent:'opacity-50'}`}><Icons.Refresh size={20}/></button>}
-                        <button onClick={()=>{ if(view==='passengers') { setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount:0, date:getTodayDate(), time: ''}); setModal('passenger'); } else if(view==='trips') { setSuggestedTrip(null); setEditingTripId(null); setModal('trip'); } else if(view==='lostFound') { setFormData({date: getTodayDate(), status: 'Pendente'}); setModal('lostFound'); } else if(view==='drivers') { setFormData({status: 'Ativo'}); setModal('driver'); } else { setSuggestedTrip(null); setEditingTripId(null); setModal('trip'); } }} className={`${theme.primary} p-2.5 rounded-xl shadow-lg active:scale-95`}><Icons.Plus/></button>
+
+                    <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth relative">
+                        <div className="max-w-6xl mx-auto pb-20">
+                            {view === 'dashboard' && <Dashboard data={data} theme={theme} setView={setView} onOpenModal={(t:string)=>{ if(t==='newPax'){ setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate(), time: ''}); setModal('passenger'); } else { setModal('trip'); setFormData({}); } }} dbOp={dbOp} setAiModal={setAiModal} user={user} notify={notify} />}
+                            {view === 'passengers' && <Passageiros data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setFormData={setFormData} setModal={setModal} del={del} notify={notify} />}
+                            {view === 'drivers' && <Motoristas data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setFormData={setFormData} setModal={setModal} del={del} notify={notify} />}
+                            {view === 'trips' && <Viagens data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} openEditTrip={openEditTrip} updateTripStatus={updateTripStatus} del={del} duplicateTrip={duplicateTrip} notify={notify} loadOlderTrips={loadOlderTrips} />}
+                            {view === 'appointments' && <Agendamentos data={data} theme={theme} setFormData={setFormData} setModal={setModal} dbOp={dbOp} setSuggestedTrip={setSuggestedTrip} setEditingTripId={setEditingTripId} notify={notify} requestConfirm={requestConfirm} />}
+                            
+                            {view === 'table' && <Tabela 
+                                data={data} theme={theme} tableTab={tableTab} setTableTab={setTableTab} 
+                                currentOpDate={currentOpDate} getTodayDate={getTodayDate} analysisDate={analysisDate} setAnalysisDate={setAnalysisDate} 
+                                analysisRotatedList={getRotatedList(analysisDate)} tableStatus={tableStatus} 
+                                editName={editName} tempName={tempName} setEditName={setEditName} setTempName={setTempName} saveDriverName={saveDriverName} 
+                                updateTableStatus={updateTableStatus} currentRotatedList={getRotatedList(currentOpDate)} confirmedTimes={confirmedTimes} isTimeExpired={isTimeExpired} 
+                                lousaOrder={lousaOrder} sendToLousaKeepConfirmed={sendToLousaKeepConfirmed} handleLousaAction={handleLousaAction} startLousaTime={startLousaTime} 
+                                draggedItem={draggedItem} handleDragStart={handleDragStart} handleDrop={handleDrop} handleTouchStart={handleTouchStart} handleTouchMove={handleTouchMove} handleTouchEnd={handleTouchEnd} 
+                                addMadrugadaVaga={addMadrugadaVaga} madrugadaList={madrugadaList} handleMadrugadaDragStart={handleMadrugadaDragStart} handleMadrugadaDrop={handleMadrugadaDrop} removeMadrugadaVaga={removeMadrugadaVaga} toggleMadrugadaRiscado={toggleMadrugadaRiscado} spList={spList} madrugadaData={madrugadaData} openMadrugadaTrip={openMadrugadaTrip} 
+                                cannedMessages={cannedMessages} addCannedMessage={addCannedMessage} updateCannedMessage={updateCannedMessage} deleteCannedMessage={deleteCannedMessage} handleCannedDragStart={handleCannedDragStart} handleCannedDrop={handleCannedDrop} handleGeneralDragStart={handleGeneralDragStart} handleGeneralDrop={handleGeneralDrop} 
+                                addNullLousaItem={addNullLousaItem} notify={notify} 
+                                getRotatedList={getRotatedList} 
+                                getRotatedMadrugadaList={getRotatedMadrugadaList}
+                            />}
+                            
+                            {(view === 'financeiro' || view === 'billing') && <Financeiro data={data} theme={theme} pricePerPassenger={pricePerPassenger} billingData={(() => { 
+                                const targetMonth = billingDate.getMonth(); 
+                                const targetYear = billingDate.getFullYear(); 
+                                const validTrips = data.trips.filter((t:any) => { 
+                                    if (t.status === 'Cancelada' || !t.date) return false; 
+                                    const [y, m, d] = t.date.split('-').map(Number); 
+                                    return (m - 1) === targetMonth && y === targetYear; 
+                                }); 
+                                const groups:any = {}; 
+                                let totalPending = 0; let totalPaid = 0; 
+                                validTrips.forEach((t:any) => { 
+                                    let value = 0; let pCount = 0; 
+                                    if (t.isExtra) { value = parseFloat(t.value) || 0; pCount = 0; } 
+                                    else if (t.isMadrugada) { 
+                                        pCount = t.pCountSnapshot !== undefined ? parseInt(t.pCountSnapshot || 0) : parseInt(t.pCount || 0); 
+                                        const unitPrice = t.ticketPrice !== undefined ? Number(t.ticketPrice) : 4; 
+                                        value = pCount * unitPrice; 
+                                    } else { 
+                                        if (t.pCountSnapshot !== undefined && t.pCountSnapshot !== null) pCount = parseInt(t.pCountSnapshot || 0);
+                                        else if (t.passengersSnapshot) pCount = t.passengersSnapshot.reduce((acc:number, p:any) => acc + parseInt(p.passengerCount || 1), 0);
+                                        else pCount = data.passengers.filter((p:any) => (t.passengerIds||[]).includes(p.id)).reduce((a:number,b:any) => a + parseInt(b.passengerCount||1), 0);
+                                        const unitPrice = t.ticketPrice !== undefined ? Number(t.ticketPrice) : 4; 
+                                        value = pCount * unitPrice; 
+                                        if (pCount === 0 && t.value) value = parseFloat(t.value); 
+                                    } 
+                                    const isPaid = t.paymentStatus === 'Pago'; 
+                                    if (isPaid) totalPaid += value; else totalPending += value; 
+                                    const dateKey = t.date; 
+                                    if (!groups[dateKey]) groups[dateKey] = { date: dateKey, trips: [], totalValue: 0 }; 
+                                    groups[dateKey].trips.push({ ...t, pCount, value, isPaid }); 
+                                    groups[dateKey].totalValue += value; 
+                                }); 
+                                const sortedGroups = Object.values(groups).sort((a:any, b:any) => b.date.localeCompare(a.date)); 
+                                sortedGroups.forEach((g:any) => g.trips.sort((a:any, b:any) => (b.time || '').localeCompare(a.time || ''))); 
+                                return { groups: sortedGroups, summary: { pending: totalPending, paid: totalPaid, total: totalPending + totalPaid } }; 
+                            })()} billingDate={billingDate} prevBillingMonth={()=>setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth()-1, 1))} nextBillingMonth={()=>setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth()+1, 1))} togglePaymentStatus={(trip:any) => dbOp('update', 'trips', { id: trip.id, paymentStatus: trip.paymentStatus === 'Pago' ? 'Pendente' : 'Pago' })} sendBillingMessage={sendBillingMessage} del={del} setFormData={setFormData} setModal={setModal} openEditTrip={openEditTrip} user={user} notify={notify} />}
+                            {view === 'achados' && <Achados data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} dbOp={dbOp} del={del} notify={notify} />}
+                            {view === 'lostFound' && <Achados data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} dbOp={dbOp} del={del} notify={notify} />}
+                            {view === 'settings' && <Configuracoes user={user} theme={theme} restartTour={restartTour} setAiModal={setAiModal} geminiKey={geminiKey} setGeminiKey={setGeminiKey} saveApiKey={saveApiKey} ipToBlock={ipToBlock} setIpToBlock={setIpToBlock} blockIp={blockIp} data={data} del={del} ipHistory={ipHistory} ipLabels={ipLabels} saveIpLabel={saveIpLabel} changeTheme={changeTheme} themeKey={themeKey} dbOp={dbOp} pricePerPassenger={pricePerPassenger} notify={notify} requestConfirm={requestConfirm} setView={setView} />}
+                            {view === 'manageUsers' && <GerenciarUsuarios data={data} theme={theme} setView={setView} dbOp={dbOp} notify={notify} user={user} />}
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth relative">
-                    <div className="max-w-6xl mx-auto pb-20">
-                        {view === 'dashboard' && <Dashboard data={data} theme={theme} setView={setView} onOpenModal={(t:string)=>{ if(t==='newPax'){ setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate(), time: ''}); setModal('passenger'); } else { setModal('trip'); setFormData({}); } }} dbOp={dbOp} setAiModal={setAiModal} user={user} notify={notify} />}
-                        {view === 'passengers' && <Passageiros data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setFormData={setFormData} setModal={setModal} del={del} notify={notify} />}
-                        {view === 'drivers' && <Motoristas data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setFormData={setFormData} setModal={setModal} del={del} notify={notify} />}
-                        {view === 'trips' && <Viagens data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} openEditTrip={openEditTrip} updateTripStatus={updateTripStatus} del={del} duplicateTrip={duplicateTrip} notify={notify} loadOlderTrips={loadOlderTrips} />}
-                        {view === 'appointments' && <Agendamentos data={data} theme={theme} setFormData={setFormData} setModal={setModal} dbOp={dbOp} setSuggestedTrip={setSuggestedTrip} setEditingTripId={setEditingTripId} notify={notify} requestConfirm={requestConfirm} />}
-                        
-                        {view === 'table' && <Tabela 
-                            data={data} theme={theme} tableTab={tableTab} setTableTab={setTableTab} 
-                            currentOpDate={currentOpDate} getTodayDate={getTodayDate} analysisDate={analysisDate} setAnalysisDate={setAnalysisDate} 
-                            analysisRotatedList={getRotatedList(analysisDate)} tableStatus={tableStatus} 
-                            editName={editName} tempName={tempName} setEditName={setEditName} setTempName={setTempName} saveDriverName={saveDriverName} 
-                            updateTableStatus={updateTableStatus} currentRotatedList={getRotatedList(currentOpDate)} confirmedTimes={confirmedTimes} isTimeExpired={isTimeExpired} 
-                            lousaOrder={lousaOrder} sendToLousaKeepConfirmed={sendToLousaKeepConfirmed} handleLousaAction={handleLousaAction} startLousaTime={startLousaTime} 
-                            draggedItem={draggedItem} handleDragStart={handleDragStart} handleDrop={handleDrop} handleTouchStart={handleTouchStart} handleTouchMove={handleTouchMove} handleTouchEnd={handleTouchEnd} 
-                            addMadrugadaVaga={addMadrugadaVaga} madrugadaList={madrugadaList} handleMadrugadaDragStart={handleMadrugadaDragStart} handleMadrugadaDrop={handleMadrugadaDrop} removeMadrugadaVaga={removeMadrugadaVaga} toggleMadrugadaRiscado={toggleMadrugadaRiscado} spList={spList} madrugadaData={madrugadaData} openMadrugadaTrip={openMadrugadaTrip} 
-                            cannedMessages={cannedMessages} addCannedMessage={addCannedMessage} updateCannedMessage={updateCannedMessage} deleteCannedMessage={deleteCannedMessage} handleCannedDragStart={handleCannedDragStart} handleCannedDrop={handleCannedDrop} handleGeneralDragStart={handleGeneralDragStart} handleGeneralDrop={handleGeneralDrop} 
-                            addNullLousaItem={addNullLousaItem} notify={notify} 
-                            getRotatedList={getRotatedList} 
-                            getRotatedMadrugadaList={getRotatedMadrugadaList}
-                        />}
-                        
-                        {(view === 'financeiro' || view === 'billing') && <Financeiro data={data} theme={theme} pricePerPassenger={pricePerPassenger} billingData={(() => { 
-                            const targetMonth = billingDate.getMonth(); 
-                            const targetYear = billingDate.getFullYear(); 
-                            const validTrips = data.trips.filter((t:any) => { 
-                                if (t.status === 'Cancelada' || !t.date) return false; 
-                                const [y, m, d] = t.date.split('-').map(Number); 
-                                return (m - 1) === targetMonth && y === targetYear; 
-                            }); 
-                            const groups:any = {}; 
-                            let totalPending = 0; let totalPaid = 0; 
-                            validTrips.forEach((t:any) => { 
-                                let value = 0; let pCount = 0; 
-                                if (t.isExtra) { value = parseFloat(t.value) || 0; pCount = 0; } 
-                                else if (t.isMadrugada) { 
-                                    pCount = t.pCountSnapshot !== undefined ? parseInt(t.pCountSnapshot || 0) : parseInt(t.pCount || 0); 
-                                    const unitPrice = t.ticketPrice !== undefined ? Number(t.ticketPrice) : 4; 
-                                    value = pCount * unitPrice; 
-                                } else { 
-                                    if (t.pCountSnapshot !== undefined && t.pCountSnapshot !== null) pCount = parseInt(t.pCountSnapshot || 0);
-                                    else if (t.passengersSnapshot) pCount = t.passengersSnapshot.reduce((acc:number, p:any) => acc + parseInt(p.passengerCount || 1), 0);
-                                    else pCount = data.passengers.filter((p:any) => (t.passengerIds||[]).includes(p.id)).reduce((a:number,b:any) => a + parseInt(b.passengerCount||1), 0);
-                                    const unitPrice = t.ticketPrice !== undefined ? Number(t.ticketPrice) : 4; 
-                                    value = pCount * unitPrice; 
-                                    if (pCount === 0 && t.value) value = parseFloat(t.value); 
-                                } 
-                                const isPaid = t.paymentStatus === 'Pago'; 
-                                if (isPaid) totalPaid += value; else totalPending += value; 
-                                const dateKey = t.date; 
-                                if (!groups[dateKey]) groups[dateKey] = { date: dateKey, trips: [], totalValue: 0 }; 
-                                groups[dateKey].trips.push({ ...t, pCount, value, isPaid }); 
-                                groups[dateKey].totalValue += value; 
-                            }); 
-                            const sortedGroups = Object.values(groups).sort((a:any, b:any) => b.date.localeCompare(a.date)); 
-                            sortedGroups.forEach((g:any) => g.trips.sort((a:any, b:any) => (b.time || '').localeCompare(a.time || ''))); 
-                            return { groups: sortedGroups, summary: { pending: totalPending, paid: totalPaid, total: totalPending + totalPaid } }; 
-                        })()} billingDate={billingDate} prevBillingMonth={()=>setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth()-1, 1))} nextBillingMonth={()=>setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth()+1, 1))} togglePaymentStatus={(trip:any) => dbOp('update', 'trips', { id: trip.id, paymentStatus: trip.paymentStatus === 'Pago' ? 'Pendente' : 'Pago' })} sendBillingMessage={sendBillingMessage} del={del} setFormData={setFormData} setModal={setModal} openEditTrip={openEditTrip} user={user} notify={notify} />}
-                        {view === 'achados' && <Achados data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} dbOp={dbOp} del={del} notify={notify} />}
-                        {view === 'lostFound' && <Achados data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} dbOp={dbOp} del={del} notify={notify} />}
-                        {view === 'settings' && <Configuracoes user={user} theme={theme} restartTour={restartTour} setAiModal={setAiModal} geminiKey={geminiKey} setGeminiKey={setGeminiKey} saveApiKey={saveApiKey} ipToBlock={ipToBlock} setIpToBlock={setIpToBlock} blockIp={blockIp} data={data} del={del} ipHistory={ipHistory} ipLabels={ipLabels} saveIpLabel={saveIpLabel} changeTheme={changeTheme} themeKey={themeKey} dbOp={dbOp} pricePerPassenger={pricePerPassenger} notify={notify} requestConfirm={requestConfirm} setView={setView} />}
-                        {view === 'manageUsers' && <GerenciarUsuarios data={data} theme={theme} setView={setView} dbOp={dbOp} notify={notify} user={user} />}
-                    </div>
-                </div>
-            </div>
-
-            <GlobalModals
-                modal={modal} setModal={setModal}
-                aiModal={aiModal} setAiModal={setAiModal}
-                aiInput={aiInput} setAiInput={setAiInput}
-                isListening={isListening} toggleMic={toggleMic} handleSmartCreate={handleSmartCreate} aiLoading={aiLoading}
-                theme={theme} themeKey={themeKey}
-                formData={formData} setFormData={setFormData}
-                suggestedTrip={suggestedTrip} setSuggestedTrip={setSuggestedTrip}
-                searchId={searchId} setSearchId={setSearchId}
-                addById={addById} autoFill={autoFill} removePax={removePax} confirmTrip={confirmTrip} simulate={simulate}
-                save={save} saveExtraCharge={saveExtraCharge}
-                data={data} spList={spList} madrugadaList={madrugadaList}
-                tempVagaMadrugada={tempVagaMadrugada} setTempVagaMadrugada={setTempVagaMadrugada} confirmAddMadrugadaVaga={confirmAddMadrugadaVaga}
-                vagaToBlock={vagaToBlock} tempJustification={tempJustification} setTempJustification={setTempJustification} confirmMadrugadaBlock={confirmMadrugadaBlock}
-                showNewsModal={showNewsModal} latestNews={latestNews} markNewsAsSeen={markNewsAsSeen}
-            />
-            
-            {runTour && (
-                <TourGuide steps={TOUR_STEPS} currentStep={tourStep} onNext={() => setTourStep(prev => prev + 1)} onPrev={() => setTourStep(prev => prev - 1)} onClose={completeTour} theme={theme} />
-            )}
+                <GlobalModals
+                    modal={modal} setModal={setModal}
+                    aiModal={aiModal} setAiModal={setAiModal}
+                    aiInput={aiInput} setAiInput={setAiInput}
+                    isListening={isListening} toggleMic={toggleMic} handleSmartCreate={handleSmartCreate} aiLoading={aiLoading}
+                    theme={theme} themeKey={themeKey}
+                    formData={formData} setFormData={setFormData}
+                    suggestedTrip={suggestedTrip} setSuggestedTrip={setSuggestedTrip}
+                    searchId={searchId} setSearchId={setSearchId}
+                    addById={addById} autoFill={autoFill} removePax={removePax} confirmTrip={confirmTrip} simulate={simulate}
+                    save={save} saveExtraCharge={saveExtraCharge}
+                    data={data} spList={spList} madrugadaList={madrugadaList}
+                    tempVagaMadrugada={tempVagaMadrugada} setTempVagaMadrugada={setTempVagaMadrugada} confirmAddMadrugadaVaga={confirmAddMadrugadaVaga}
+                    vagaToBlock={vagaToBlock} tempJustification={tempJustification} setTempJustification={setTempJustification} confirmMadrugadaBlock={confirmMadrugadaBlock}
+                    showNewsModal={showNewsModal} latestNews={latestNews} markNewsAsSeen={markNewsAsSeen}
+                />
+                
+                {runTour && (
+                    <TourGuide steps={TOUR_STEPS} currentStep={tourStep} onNext={() => setTourStep(prev => prev + 1)} onPrev={() => setTourStep(prev => prev - 1)} onClose={completeTour} theme={theme} />
+                )}
+             </PaymentGate>
         </div>
     );
 }
