@@ -101,10 +101,7 @@ const AppContent = () => {
     const [confirmState, setConfirmState] = useState<any>({ isOpen: false, title: '', message: '', onConfirm: () => {}, type: 'danger' });
 
     // PAYWALL STATE - Default Locked (True) unless Breno
-    const [isSystemLocked, setIsSystemLocked] = useState(() => {
-        // Se usuário não carregou ainda, assume bloqueado por segurança
-        return true;
-    });
+    const [isSystemLocked, setIsSystemLocked] = useState(true); // Padrão: BLOQUEADO
 
     // Tour
     const [runTour, setRunTour] = useState(false);
@@ -292,30 +289,29 @@ const AppContent = () => {
 
     // PAYWALL / MENSALIDADE LISTENER
     useEffect(() => {
-        // Se ainda não temos usuário, mantemos bloqueado (estado inicial)
+        // Se usuário não está carregado, não faz nada
         if (!user) return;
 
-        // Se for o Breno (case insensitive), nunca bloqueia
+        // Se for o Breno (case insensitive), libera imediatamente
         if (user.username.toLowerCase() === 'breno') {
             setIsSystemLocked(false);
             return;
         }
 
-        // Para outros usuários, verifica o DB
+        // Para outros usuários, escuta o banco de dados
         if (db) {
             const subRef = db.ref('system_status/subscription');
             const subCb = subRef.on('value', (snap: any) => {
                 const val = snap.val();
                 if (val) {
-                    // Se tem dados, verifica expiração
                     const now = Date.now();
                     if (val.isActive && val.expiresAt > now) {
-                        setIsSystemLocked(false);
+                        setIsSystemLocked(false); // Assinatura válida
                     } else {
-                        setIsSystemLocked(true);
+                        setIsSystemLocked(true); // Expirada ou Inativa
                     }
                 } else {
-                    // Se não tem dados no DB (ex: DB zerado), BLOQUEIA por padrão
+                    // Se não existe registro, bloqueia por padrão
                     setIsSystemLocked(true);
                 }
             });
