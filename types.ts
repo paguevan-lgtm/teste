@@ -75,6 +75,11 @@ export interface Theme {
     radius: string;
     palette: string[];
     font?: string;
+    // New UI Props for Light/Dark compatibility
+    inner: string; // For inputs, inner containers (bg + border)
+    ghost: string; // For hover states
+    divider: string; // For separator lines
+    contentBg?: string; // Background overlay for main content area
 }
 
 export interface User {

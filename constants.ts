@@ -32,30 +32,58 @@ export const INITIAL_SP_LIST = [
     {vaga: '03', name: 'Chaiene'}
 ];
 
+const DARK_DEFAULTS = {
+    inner: 'bg-black/20 border-white/10 text-white',
+    ghost: 'hover:bg-white/5',
+    divider: 'border-white/10',
+    contentBg: 'bg-black/20'
+};
+
 export const THEMES: Record<string, Theme> = {
     default: { 
-        name: 'Padrão', bg: 'bg-slate-950', card: 'bg-slate-800 border-slate-700', text: 'text-slate-200', primary: 'bg-amber-600 text-white', accent: 'text-amber-400', border: 'border-slate-700', radius: 'rounded-xl', palette: ['#f59e0b', '#d97706', '#fbbf24', '#b45309', '#78350f'] 
+        name: 'Padrão', bg: 'bg-slate-950', card: 'bg-slate-800 border-slate-700', text: 'text-slate-200', primary: 'bg-amber-600 text-white', accent: 'text-amber-400', border: 'border-slate-700', radius: 'rounded-xl', palette: ['#f59e0b', '#d97706', '#fbbf24', '#b45309', '#78350f'],
+        ...DARK_DEFAULTS
     },
     wood: { 
-        name: 'Rústico (Madeira)', bg: 'bg-[#1a110e]', card: 'bg-[#2e1f18] border-[#4a342a]', text: 'text-[#e6dace]', primary: 'bg-[#8b5a2b] text-white', accent: 'text-[#d4a373]', border: 'border-[#4a342a]', radius: 'rounded-xl', palette: ['#8b5a2b', '#d4a373', '#6f4e37', '#a67b5b', '#c19a6b'] 
+        name: 'Rústico (Madeira)', bg: 'bg-[#1a110e]', card: 'bg-[#2e1f18] border-[#4a342a]', text: 'text-[#e6dace]', primary: 'bg-[#8b5a2b] text-white', accent: 'text-[#d4a373]', border: 'border-[#4a342a]', radius: 'rounded-xl', palette: ['#8b5a2b', '#d4a373', '#6f4e37', '#a67b5b', '#c19a6b'],
+        ...DARK_DEFAULTS
     },
     dark: { 
-        name: 'Escuro Profundo', bg: 'bg-black', card: 'bg-zinc-900 border-zinc-800', text: 'text-zinc-200', primary: 'bg-orange-600 text-white', accent: 'text-orange-400', border: 'border-zinc-800', radius: 'rounded-xl', palette: ['#ea580c', '#f97316', '#fdba74', '#c2410c', '#7c2d12'] 
+        name: 'Escuro Profundo', bg: 'bg-black', card: 'bg-zinc-900 border-zinc-800', text: 'text-zinc-200', primary: 'bg-orange-600 text-white', accent: 'text-orange-400', border: 'border-zinc-800', radius: 'rounded-xl', palette: ['#ea580c', '#f97316', '#fdba74', '#c2410c', '#7c2d12'],
+        ...DARK_DEFAULTS
     },
     cyberpunk: { 
-        name: 'Cyberpunk', bg: 'bg-[#0b0c15]', card: 'bg-[#181926] border-[#2f3146]', text: 'text-[#e0def4]', primary: 'bg-[#eb6f92] text-white', accent: 'text-[#f6c177]', border: 'border-[#2f3146]', radius: 'rounded-none', palette: ['#eb6f92', '#f6c177', '#9ccfd8', '#c4a7e7', '#31748f'] 
+        name: 'Cyberpunk', bg: 'bg-[#0b0c15]', card: 'bg-[#181926] border-[#2f3146]', text: 'text-[#e0def4]', primary: 'bg-[#eb6f92] text-white', accent: 'text-[#f6c177]', border: 'border-[#2f3146]', radius: 'rounded-none', palette: ['#eb6f92', '#f6c177', '#9ccfd8', '#c4a7e7', '#31748f'],
+        ...DARK_DEFAULTS
     },
     dracula: { 
-        name: 'Drácula', bg: 'bg-[#282a36]', card: 'bg-[#44475a] border-[#6272a4]', text: 'text-[#f8f8f2]', primary: 'bg-[#bd93f9] text-[#282a36]', accent: 'text-[#50fa7b]', border: 'border-[#6272a4]', radius: 'rounded-xl', palette: ['#bd93f9', '#50fa7b', '#ff79c6', '#8be9fd', '#ffb86c'] 
+        name: 'Drácula', bg: 'bg-[#282a36]', card: 'bg-[#44475a] border-[#6272a4]', text: 'text-[#f8f8f2]', primary: 'bg-[#bd93f9] text-[#282a36]', accent: 'text-[#50fa7b]', border: 'border-[#6272a4]', radius: 'rounded-xl', palette: ['#bd93f9', '#50fa7b', '#ff79c6', '#8be9fd', '#ffb86c'],
+        ...DARK_DEFAULTS
     },
     solar: { 
-        name: 'Solar (Claro)', bg: 'bg-[#fdf6e3]', card: 'bg-[#eee8d5] border-[#d2b589]', text: 'text-[#657b83]', primary: 'bg-[#b58900] text-white', accent: 'text-[#cb4b16]', border: 'border-[#d2b589]', radius: 'rounded-2xl', palette: ['#b58900', '#cb4b16', '#dc322f', '#d33682', '#6c71c4'] 
+        name: 'Solar (Claro)', 
+        bg: 'bg-[#f0f2f5]', // Fundo Cinza Claro Moderno
+        card: 'bg-white border-gray-200 shadow-sm', 
+        text: 'text-slate-600', 
+        primary: 'bg-amber-500 text-white', 
+        accent: 'text-amber-600', 
+        border: 'border-gray-200', 
+        radius: 'rounded-2xl', 
+        palette: ['#f59e0b', '#d97706', '#ef4444', '#3b82f6', '#10b981'],
+        inner: 'bg-gray-50 border-gray-200 text-slate-800 focus:bg-white',
+        ghost: 'hover:bg-gray-100 text-slate-600',
+        divider: 'border-gray-200',
+        contentBg: 'bg-transparent'
     },
     midnight: { 
-        name: 'Meia-noite', bg: 'bg-indigo-950', card: 'bg-indigo-900 border-indigo-800', text: 'text-indigo-100', primary: 'bg-cyan-600 text-white', accent: 'text-cyan-300', border: 'border-indigo-700', radius: 'rounded-xl', palette: ['#0891b2', '#06b6d4', '#67e8f9', '#4338ca', '#3730a3'] 
+        name: 'Meia-noite', bg: 'bg-indigo-950', card: 'bg-indigo-900 border-indigo-800', text: 'text-indigo-100', primary: 'bg-cyan-600 text-white', accent: 'text-cyan-300', border: 'border-indigo-700', radius: 'rounded-xl', palette: ['#0891b2', '#06b6d4', '#67e8f9', '#4338ca', '#3730a3'],
+        ...DARK_DEFAULTS,
+        inner: 'bg-indigo-950/50 border-indigo-800 text-indigo-100'
     },
     forest: { 
-        name: 'Floresta', bg: 'bg-green-950', card: 'bg-green-900 border-green-800', text: 'text-green-100', primary: 'bg-emerald-600 text-white', accent: 'text-emerald-400', border: 'border-green-800', radius: 'rounded-xl', palette: ['#059669', '#10b981', '#34d399', '#065f46', '#064e3b'] 
+        name: 'Floresta', bg: 'bg-green-950', card: 'bg-green-900 border-green-800', text: 'text-green-100', primary: 'bg-emerald-600 text-white', accent: 'text-emerald-400', border: 'border-green-800', radius: 'rounded-xl', palette: ['#059669', '#10b981', '#34d399', '#065f46', '#064e3b'],
+        ...DARK_DEFAULTS,
+        inner: 'bg-green-950/50 border-green-800 text-green-100'
     },
 };
 

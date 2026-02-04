@@ -1,6 +1,4 @@
 
-// ... existing imports ...
-// (Retaining imports as they are in the file provided by the user)
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db, auth } from './firebase';
 import { THEMES, INITIAL_SP_LIST, BAIRROS } from './constants';
@@ -527,7 +525,8 @@ const AppContent = () => {
 
     // LÓGICA DE VIAGEM TEMPORÁRIA
     useEffect(() => {
-        if (!db || !user || !isFireConnected) return;
+        // CORREÇÃO: Removido !isFireConnected para permitir funcionamento com DB público
+        if (!db || !user) return; 
 
         const manageTempTrips = () => {
             const now = new Date();
@@ -596,9 +595,8 @@ const AppContent = () => {
                 const diffMinutes = (now.getTime() - slotDate.getTime()) / 60000;
 
                 // --- CRIAÇÃO DA VIAGEM TEMPORÁRIA ---
-                // Only create if we are AROUND the slot time (5 mins before -> 55 mins after)
-                // Expanded window to allow overlap and early creation
-                if (diffMinutes >= -5 && diffMinutes <= 55) {
+                // Janela Rígida: Cria APENAS quando chegar a hora (0 min) e mantém por 45 min.
+                if (diffMinutes >= 0 && diffMinutes <= 45) {
                     
                     const driverSp = spList.find((d:any) => d.vaga === slot.vaga);
                     const driverDb = driverSp ? data.drivers.find((d:any) => d.name.toLowerCase() === driverSp.name.toLowerCase()) : null;
@@ -622,7 +620,7 @@ const AppContent = () => {
                         currentMaxId++;
                         const nextId = currentMaxId.toString();
                         
-                        // Trip time for PASSENGERS is +60 mins from Slot Time
+                        // Trip time set to +60 mins from Slot Time (User Request)
                         const tripTime = addMinutes(slot.time, 60);
                         
                         const [sH] = slot.time.split(':').map(Number);
@@ -673,10 +671,11 @@ const AppContent = () => {
                     
                     const diff = (now.getTime() - slotDate.getTime()) / 60000;
                     
-                    // Relaxed expiration: Keep trip slightly longer to prevent flicker
-                    if (diff > 55 || diff < -5) {
+                    // Expiration: Delete exactly after 45 minutes OR if time is invalid (< 0)
+                    if (diff > 45 || diff < 0) {
                         db.ref('trips').child(t.id).remove();
                     } else {
+                        // Update trip time if slot time changed (keeps it sync with +60 rule)
                         const correctTripTime = addMinutes(activeSlot.time, 60);
                         if (t.time !== correctTripTime) {
                              db.ref('trips').child(t.id).update({ time: correctTripTime });
@@ -690,6 +689,8 @@ const AppContent = () => {
 
     }, [uiTicker, data.trips, tableStatus, lousaOrder, spList, data.drivers, currentOpDate, rotationBaseDate]);
 
+    // ... (rest of the file remains unchanged)
+    
     // Função de Tour Restart / Complete
     const restartTour = () => { 
         setTourStep(0); 
@@ -1397,17 +1398,17 @@ const AppContent = () => {
                 draggedMenuIndex={draggedMenuIndex}
              />
 
-             <div className="flex-1 flex flex-col h-full min-w-0 bg-black/20">
+             <div className={`flex-1 flex flex-col h-full min-w-0 ${theme.contentBg || 'bg-black/20'}`}>
                 {/* Header */}
                 <div className={`h-16 flex items-center justify-between px-4 md:px-8 border-b ${theme.border} bg-opacity-80 backdrop-blur-md z-30 flex-shrink-0`}>
                     <div className="flex items-center gap-4 flex-1">
                         <button onClick={() => setMenuOpen(true)} className="md:hidden p-2 -ml-2"><Icons.Menu size={24} /></button>
                         <h2 className={`font-bold text-lg md:text-xl truncate ${['passengers', 'drivers', 'trips', 'achados', 'lostFound'].includes(view) && searchTerm ? 'hidden md:block' : 'block'}`}>{orderedMenuItems.find(i=>i.id===view)?.l || 'Bora de Van'}</h2>
-                        {['passengers', 'drivers', 'trips', 'achados', 'lostFound'].includes(view) && (<div className="flex-1 max-w-md ml-auto md:ml-4"><div className="relative group"><div className="absolute inset-y-0 left-0 pl-3 flex items-center opacity-50"><Icons.Search size={16} /></div><input type="text" placeholder={`Pesquisar...`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm outline-none ${theme.text}`}/>{searchTerm && (<button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-0 pr-3 flex items-center opacity-50"><Icons.X size={14} /></button>)}</div></div>)}
+                        {['passengers', 'drivers', 'trips', 'achados', 'lostFound'].includes(view) && (<div className="flex-1 max-w-md ml-auto md:ml-4"><div className="relative group"><div className="absolute inset-y-0 left-0 pl-3 flex items-center opacity-50"><Icons.Search size={16} /></div><input type="text" placeholder={`Pesquisar...`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-full ${theme.inner} border ${theme.border} rounded-xl py-2 pl-10 pr-4 text-sm outline-none ${theme.text}`}/>{searchTerm && (<button onClick={() => setSearchTerm('')} className="absolute inset-y-0 right-0 pr-3 flex items-center opacity-50"><Icons.X size={14} /></button>)}</div></div>)}
                     </div>
                     <div className="flex gap-2 ml-2">
                         {/* Command Trigger */}
-                        <button onClick={() => setCmdOpen(true)} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/50 hidden md:flex items-center gap-2 text-xs font-bold border border-white/5 mr-2" title="Command Palette">
+                        <button onClick={() => setCmdOpen(true)} className={`p-2.5 rounded-xl ${theme.ghost || 'bg-white/5 hover:bg-white/10 text-white/50'} hidden md:flex items-center gap-2 text-xs font-bold border ${theme.divider || 'border-white/5'} mr-2`} title="Command Palette">
                             <Icons.Command size={14} /> <span className="opacity-50">CTRL+K</span>
                         </button>
 
@@ -1419,9 +1420,9 @@ const AppContent = () => {
                 <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth relative">
                     <div className="max-w-6xl mx-auto pb-20">
                         {view === 'dashboard' && <Dashboard data={data} theme={theme} setView={setView} onOpenModal={(t:string)=>{ if(t==='newPax'){ setFormData({neighborhood:BAIRROS[0],status:'Ativo',payment:'Dinheiro',passengerCount:1, luggageCount: 0, date: getTodayDate(), time: ''}); setModal('passenger'); } else { setModal('trip'); setFormData({}); } }} dbOp={dbOp} setAiModal={setAiModal} user={user} notify={notify} />}
-                        {view === 'passengers' && <Passageiros data={data} theme={theme} searchTerm={searchTerm} setFormData={setFormData} setModal={setModal} del={del} notify={notify} />}
-                        {view === 'drivers' && <Motoristas data={data} theme={theme} searchTerm={searchTerm} setFormData={setFormData} setModal={setModal} del={del} notify={notify} />}
-                        {view === 'trips' && <Viagens data={data} theme={theme} searchTerm={searchTerm} openEditTrip={openEditTrip} updateTripStatus={updateTripStatus} del={del} duplicateTrip={duplicateTrip} notify={notify} />}
+                        {view === 'passengers' && <Passageiros data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setFormData={setFormData} setModal={setModal} del={del} notify={notify} />}
+                        {view === 'drivers' && <Motoristas data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setFormData={setFormData} setModal={setModal} del={del} notify={notify} />}
+                        {view === 'trips' && <Viagens data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} openEditTrip={openEditTrip} updateTripStatus={updateTripStatus} del={del} duplicateTrip={duplicateTrip} notify={notify} />}
                         {view === 'appointments' && <Agendamentos data={data} theme={theme} setFormData={setFormData} setModal={setModal} dbOp={dbOp} setSuggestedTrip={setSuggestedTrip} setEditingTripId={setEditingTripId} notify={notify} requestConfirm={requestConfirm} />}
                         
                         {/* Tabela Recebe Função para Calcular Listas Futuras */}
@@ -1501,8 +1502,8 @@ const AppContent = () => {
                             
                             return { groups: sortedGroups, summary: { pending: totalPending, paid: totalPaid, total: totalPending + totalPaid } }; 
                         })()} billingDate={billingDate} prevBillingMonth={()=>setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth()-1, 1))} nextBillingMonth={()=>setBillingDate(new Date(billingDate.getFullYear(), billingDate.getMonth()+1, 1))} togglePaymentStatus={(trip:any) => dbOp('update', 'trips', { id: trip.id, paymentStatus: trip.paymentStatus === 'Pago' ? 'Pendente' : 'Pago' })} sendBillingMessage={sendBillingMessage} del={del} setFormData={setFormData} setModal={setModal} openEditTrip={openEditTrip} user={user} notify={notify} />}
-                        {view === 'achados' && <Achados data={data} theme={theme} searchTerm={searchTerm} dbOp={dbOp} del={del} notify={notify} />}
-                        {view === 'lostFound' && <Achados data={data} theme={theme} searchTerm={searchTerm} dbOp={dbOp} del={del} notify={notify} />}
+                        {view === 'achados' && <Achados data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} dbOp={dbOp} del={del} notify={notify} />}
+                        {view === 'lostFound' && <Achados data={data} theme={theme} searchTerm={searchTerm} setSearchTerm={setSearchTerm} setModal={setModal} dbOp={dbOp} del={del} notify={notify} />}
                         {view === 'settings' && <Configuracoes user={user} theme={theme} restartTour={restartTour} setAiModal={setAiModal} geminiKey={geminiKey} setGeminiKey={setGeminiKey} saveApiKey={saveApiKey} ipToBlock={ipToBlock} setIpToBlock={setIpToBlock} blockIp={blockIp} data={data} del={del} ipHistory={ipHistory} ipLabels={ipLabels} saveIpLabel={saveIpLabel} changeTheme={changeTheme} themeKey={themeKey} dbOp={dbOp} pricePerPassenger={pricePerPassenger} notify={notify} requestConfirm={requestConfirm} setView={setView} />}
                         {view === 'manageUsers' && <GerenciarUsuarios data={data} theme={theme} setView={setView} dbOp={dbOp} notify={notify} user={user} />}
                     </div>
