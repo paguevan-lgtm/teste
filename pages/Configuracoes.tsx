@@ -97,7 +97,7 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
 
     const banDevice = (deviceId: string, reason: string) => {
         if (!deviceId) return;
-        requestConfirm("Banir Dispositivo?", "Este aparelho não conseguirá mais fazer login, mesmo trocando de IP. Se ele estiver logado, cairá imediatamente.", () => {
+        requestConfirm("Banir Dispositivo?", "Este aparelho não conseguirá mais fazer login, mesmo trocando de navegador ou aba anônima. Se estiver logado, cairá imediatamente.", () => {
             dbOp('update', `blocked_devices/${deviceId}`, { 
                 reason, 
                 blockedBy: user.username,
@@ -108,14 +108,10 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
 
     const unbanDevice = (deviceId: string) => {
         requestConfirm("Desbloquear?", "O aparelho voltará a ter acesso.", () => {
-            // CORREÇÃO: Passar a coleção e o ID separadamente para o dbOp('delete') funcionar
             dbOp('delete', 'blocked_devices', deviceId);
         });
     };
 
-    // Prepare Blocked List Logic
-    // NOTE: In a real scenario, I'd update App.tsx to fetch 'blocked_devices'. 
-    // Here I will use a direct DB listener for the admin panel inside the component.
     const [blockedList, setBlockedList] = useState<any[]>([]);
     
     // Fetch Blocked Devices
@@ -315,7 +311,7 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                         </div>
                         <div>
                             <h3 className="font-bold text-red-200">Painel de Segurança & Avisos</h3>
-                            <p className="text-xs text-red-300/60">Controle de acesso por Dispositivo (Fingerprint)</p>
+                            <p className="text-xs text-red-300/60">Fingerprint de Hardware (Bloqueia mesmo trocando navegador)</p>
                         </div>
                     </div>
 
@@ -375,7 +371,8 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                             {securityTab === 'timeline' && (
                                 <div className="bg-black/20 rounded-xl border border-white/5 max-h-80 overflow-y-auto custom-scrollbar p-1">
                                     {ipHistory.map((log:any) => { 
-                                        const deviceInfo = log.deviceInfo || parseUserAgent(log.device || '');
+                                        const uaInfo = log.deviceInfo || parseUserAgent(log.device || '');
+                                        const gpuInfo = log.deviceInfo?.gpu || '';
                                         const isBanned = blockedList.some(b => b.id === log.deviceId);
 
                                         let locationStr = 'Local Desconhecido';
@@ -407,11 +404,12 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                                                 
                                                 <div className="flex items-center gap-3 mt-2">
                                                     <div className="w-8 h-8 rounded bg-white/5 flex items-center justify-center text-white/50">
-                                                        {deviceInfo.device === 'Desktop' ? <Icons.Laptop size={16}/> : <Icons.Smartphone size={16}/>}
+                                                        {uaInfo.device === 'Desktop' ? <Icons.Laptop size={16}/> : <Icons.Smartphone size={16}/>}
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <div className="text-xs text-white/80 font-bold truncate">{deviceInfo.browser} on {deviceInfo.device}</div>
-                                                        <div className="text-[10px] text-white/40 truncate flex gap-2">
+                                                        <div className="text-xs text-white/80 font-bold truncate">{uaInfo.browser} ({uaInfo.os})</div>
+                                                        {gpuInfo && <div className="text-[9px] text-white/30 truncate mt-0.5 font-mono">{gpuInfo}</div>}
+                                                        <div className="text-[10px] text-white/40 truncate flex gap-2 mt-0.5">
                                                             <span>{locationStr}</span>
                                                             <span className="opacity-50">•</span>
                                                             <span className="font-mono text-white/30" title={log.deviceId}>{log.deviceId?.substring(0,8)}...</span>
