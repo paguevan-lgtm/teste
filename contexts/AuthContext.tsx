@@ -114,16 +114,28 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
     // 2. Função de Login (DB First, Fallback to Constant)
     const login = async (u: string, p: string, coords: any): Promise<boolean> => {
         try {
-            // --- SECURITY CHECK (FINGERPRINT ROBUSTO) ---
+            // --- SECURITY CHECK (FINGERPRINT ROBUSTO & IP) ---
             const deviceId = await getDeviceFingerprint();
             
             // Verifica se está na lista de bloqueados
             if (db) {
+                // 1. Check Device ID
                 const blockedSnap = await db.ref(`blocked_devices/${deviceId}`).once('value');
                 if (blockedSnap.exists()) {
-                    // SILENT FAIL: Não mostra alerta, apenas retorna false.
-                    return false;
+                    return false; // Silent Fail
                 }
+
+                // 2. Check IP (Optional secondary check)
+                try {
+                    const ipReq = await fetch('https://api.ipify.org?format=json');
+                    const ipRes = await ipReq.json();
+                    if (ipRes.ip) {
+                        // Firebase DB query for IP (Assuming structure blocked_ips/{autoId}/ip)
+                        // Note: ideally blocked_ips should be keyed by IP replace dots with underscores for direct lookup
+                        const ipSnap = await db.ref('blocked_ips').orderByChild('ip').equalTo(ipRes.ip).once('value');
+                        if (ipSnap.exists()) return false; // Silent Fail
+                    }
+                } catch(e) { /* Ignore IP check failure */ }
             }
             // ------------------------------------
 
