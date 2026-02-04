@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { Icons, Input, Button } from '../components/Shared';
 import { THEMES } from '../constants';
 import { getAvatarUrl, generateUniqueId, getTodayDate, compressImage, parseUserAgent } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
+import { db } from '../firebase';
 
 export default function Configuracoes({ user, theme, restartTour, setAiModal, geminiKey, setGeminiKey, saveApiKey, ipToBlock, setIpToBlock, blockIp, data, del, ipHistory, ipLabels, saveIpLabel, changeTheme, themeKey, dbOp, notify, requestConfirm, setView }: any) {
     const { logout } = useAuth();
@@ -12,8 +14,31 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
     const [newsContent, setNewsContent] = useState('');
     const [newsImage, setNewsImage] = useState<string|null>(null);
     const [securityTab, setSecurityTab] = useState('timeline'); // timeline | blocked
+    const [daysRemaining, setDaysRemaining] = useState<number|null>(null);
 
     const isAdmin = user.username === 'Breno';
+
+    // Fetch Subscription Status
+    useEffect(() => {
+        if(!db) return;
+        const subRef = db.ref('system_settings/subscription');
+        subRef.on('value', (snap: any) => {
+            const val = snap.val();
+            if (val && val.expiry) {
+                const now = Date.now();
+                if (val.expiry > now) {
+                    const diffTime = Math.abs(val.expiry - now);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    setDaysRemaining(diffDays);
+                } else {
+                    setDaysRemaining(0);
+                }
+            } else {
+                setDaysRemaining(0);
+            }
+        });
+        return () => subRef.off();
+    }, []);
 
     const handleLogoutClick = () => {
         requestConfirm("Deseja realmente sair?", "Você terá que fazer login novamente.", () => {
@@ -111,6 +136,30 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
         });
     };
 
+    // Admin Controls for System Lock
+    const toggleSystemLock = (action: 'block' | 'unlock') => {
+        if (!isAdmin) return;
+        
+        if (action === 'block') {
+            requestConfirm("BLOQUEAR SISTEMA?", "Todos os usuários (exceto você) perderão o acesso imediatamente e verão a tela de pagamento.", () => {
+                dbOp('update', 'system_settings/subscription', {
+                    expiry: 0, // Force expire
+                    status: 'expired',
+                    updatedBy: user.username
+                });
+                notify("Sistema Bloqueado!", "success");
+            });
+        } else {
+            const newExpiry = Date.now() + (30 * 24 * 60 * 60 * 1000); // 30 dias
+            dbOp('update', 'system_settings/subscription', {
+                expiry: newExpiry,
+                status: 'active',
+                updatedBy: user.username
+            });
+            notify("Sistema Liberado por 30 dias!", "success");
+        }
+    };
+
     const [blockedList, setBlockedList] = useState<any[]>([]);
     
     // Fetch Blocked Devices (Admin Only)
@@ -164,18 +213,31 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-3">
-                        {user.role === 'admin' && (
-                            <button 
-                                onClick={() => setView('manageUsers')}
-                                className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-5 py-3 rounded-xl flex items-center gap-2 font-bold transition-all active:scale-95 text-sm"
-                            >
-                                <Icons.Users size={18}/> Gerenciar Usuários
+                    <div className="flex flex-col items-end gap-3">
+                        {/* SUBSCRIPTION STATUS WIDGET */}
+                        <div className="bg-black/30 border border-white/10 rounded-xl p-3 flex items-center gap-3 backdrop-blur-sm">
+                            <div className={`p-2 rounded-lg ${daysRemaining && daysRemaining > 5 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                <Icons.Clock size={20}/>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-[10px] uppercase font-bold text-white/50 tracking-wider">Renovação em</div>
+                                <div className="text-lg font-black text-white">{daysRemaining !== null ? `${daysRemaining} dias` : '--'}</div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-3">
+                            {user.role === 'admin' && (
+                                <button 
+                                    onClick={() => setView('manageUsers')}
+                                    className="bg-white/5 hover:bg-white/10 text-white border border-white/10 px-5 py-3 rounded-xl flex items-center gap-2 font-bold transition-all active:scale-95 text-sm"
+                                >
+                                    <Icons.Users size={18}/> Gerenciar Usuários
+                                </button>
+                            )}
+                            <button onClick={handleLogoutClick} className="bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 px-5 py-3 rounded-xl flex items-center gap-2 font-bold transition-all active:scale-95 text-sm">
+                                <Icons.LogOut size={18}/> Sair
                             </button>
-                        )}
-                        <button onClick={handleLogoutClick} className="bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 px-5 py-3 rounded-xl flex items-center gap-2 font-bold transition-all active:scale-95 text-sm">
-                            <Icons.LogOut size={18}/> Sair
-                        </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -249,6 +311,30 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                 {/* COLUNA DIREITA (Menor) - IA, Tutorial e Ferramentas */}
                 <div className="lg:col-span-4 space-y-6">
                     
+                    {/* SYSTEM LOCK CONTROLS (Admin Only) */}
+                    {isAdmin && (
+                        <div className={`${theme.card} p-6 rounded-2xl border border-red-500/30 bg-red-900/5 shadow-lg`}>
+                            <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-red-200"><Icons.Lock size={20}/> Controle de Acesso</h3>
+                            <p className="text-xs opacity-60 mb-4 leading-relaxed">
+                                Gerencie o bloqueio geral do sistema. Você (Admin) sempre terá acesso.
+                            </p>
+                            <div className="space-y-3">
+                                <button 
+                                    onClick={() => toggleSystemLock('block')} 
+                                    className="w-full bg-red-600 hover:bg-red-500 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-red-900/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                    <Icons.Lock size={16}/> Bloquear Sistema Agora
+                                </button>
+                                <button 
+                                    onClick={() => toggleSystemLock('unlock')} 
+                                    className="w-full bg-green-600 hover:bg-green-500 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-green-900/20 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                    <Icons.CheckCircle size={16}/> Liberar (30 Dias)
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* IA CONFIG */}
                     <div className={`${theme.card} p-6 rounded-2xl border ${theme.border} shadow-lg`}>
                         <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Icons.Stars className="text-purple-400"/> Inteligência Artificial</h3>
