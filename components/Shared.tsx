@@ -59,7 +59,8 @@ export const Icons = {
     GripVertical: (p:any) => <Icon {...p}><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></Icon>,
     Command: (p:any) => <Icon {...p}><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></Icon>,
     CloudRain: (p:any) => <Icon {...p}><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></Icon>,
-    Calculator: (p:any) => <Icon {...p}><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></Icon>
+    Calculator: (p:any) => <Icon {...p}><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="16" y1="14" x2="16" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></Icon>,
+    Image: (p:any) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></Icon>
 };
 
 export const Button = ({ onClick, children, theme, variant='primary', icon:I, disabled, className='', size='md', id='' }: any) => {
@@ -87,10 +88,11 @@ export const IconButton = ({ onClick, icon:I, variant='default', theme, disabled
 
 export const Input = ({ label, theme, ...props }: any) => {
     const t = theme || THEMES.default;
+    const innerClass = t.inner || 'bg-black/10 border-white/10 text-white';
     return (
         <div className="flex flex-col gap-1 w-full">
             <label className={`text-xs font-bold uppercase tracking-wider opacity-60 ml-1`}>{label}</label>
-            <input className={`bg-black/10 border border-white/10 ${t.text} ${t.radius} px-4 py-3.5 outline-none focus:border-current transition-colors w-full`} {...props} />
+            <input className={`border ${innerClass} ${t.radius} px-4 py-3.5 outline-none focus:border-current transition-colors w-full`} {...props} />
         </div>
     );
 };
@@ -124,7 +126,7 @@ export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, type
                 <h3 className="text-xl font-bold mb-2">{title}</h3>
                 <p className="text-sm opacity-70 mb-6 leading-relaxed">{message}</p>
                 <div className="flex gap-3">
-                    <button onClick={onCancel} className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl font-bold text-sm transition-colors">Cancelar</button>
+                    <button onClick={onCancel} className="flex-1 bg-white/10 hover:bg-white/20 py-3 rounded-xl font-bold text-sm transition-colors text-current">Cancelar</button>
                     <button onClick={onConfirm} className={`flex-1 py-3 rounded-xl font-bold text-sm text-white shadow-lg active:scale-95 transition-all ${type === 'danger' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}`}>Confirmar</button>
                 </div>
             </div>
@@ -141,13 +143,16 @@ export const ClockWidget = ({ theme }: any) => {
         return () => clearInterval(t);
     }, []);
 
+    // Uses theme.inner for background instead of hardcoded
+    const innerBg = theme.inner ? theme.inner.split(' ')[0] : 'bg-white/5';
+
     return (
         <div className={`${theme.card} rounded-xl p-4 border ${theme.border} flex items-center justify-between`}>
             <div>
                 <div className="text-2xl font-black tracking-tight font-mono">{time.toLocaleTimeString()}</div>
                 <div className="text-xs opacity-60 uppercase font-bold tracking-widest">{time.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
             </div>
-            <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center animate-pulse text-amber-400">
+            <div className={`w-10 h-10 ${innerBg} rounded-full flex items-center justify-center animate-pulse text-amber-400`}>
                 <Icons.Clock size={20}/>
             </div>
         </div>
@@ -179,12 +184,13 @@ export const WeatherWidget = ({ theme }: any) => {
     // Simple WMO code mapper
     const getWeatherInfo = (c: number) => {
         if (c === 0) return { icon: <Icons.Sun size={24} className="text-yellow-400"/>, label: 'Ensolarado' };
-        if (c >= 1 && c <= 3) return { icon: <Icons.CloudRain size={24} className="text-gray-300"/>, label: 'Nublado' };
+        if (c >= 1 && c <= 3) return { icon: <Icons.CloudRain size={24} className="text-gray-400"/>, label: 'Nublado' };
         if (c >= 51) return { icon: <Icons.CloudRain size={24} className="text-blue-400"/>, label: 'Chuvoso' };
         return { icon: <Icons.Sun size={24} className="text-orange-400"/>, label: 'Clima' };
     };
 
-    const info = code !== null ? getWeatherInfo(code) : { icon: <Icons.Sun size={24} className="text-white/20"/>, label: '--' };
+    const info = code !== null ? getWeatherInfo(code) : { icon: <Icons.Sun size={24} className="opacity-20"/>, label: '--' };
+    const innerBg = theme.inner ? theme.inner.split(' ')[0] : 'bg-white/5';
 
     return (
         <div className={`${theme.card} rounded-xl p-4 border ${theme.border} flex items-center justify-between`}>
@@ -192,7 +198,7 @@ export const WeatherWidget = ({ theme }: any) => {
                 <div className="text-2xl font-black tracking-tight">{temp !== null ? `${temp}°C` : '--'}</div>
                 <div className="text-xs opacity-60 uppercase font-bold tracking-widest">{info.label}</div>
             </div>
-            <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center">
+            <div className={`w-10 h-10 ${innerBg} rounded-full flex items-center justify-center`}>
                 {info.icon}
             </div>
         </div>
@@ -209,31 +215,36 @@ export const CommandPalette = ({ isOpen, onClose, theme, actions }: any) => {
     }, [isOpen]);
 
     const filtered = actions.filter((a:any) => a.label.toLowerCase().includes(query.toLowerCase()));
+    
+    // Theme adaptations
+    const innerClass = theme.inner || 'bg-white/5';
+    const ghostClass = theme.ghost || 'hover:bg-white/10';
+    const dividerClass = theme.divider || 'border-white/10';
 
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[15vh] px-4" onClick={onClose}>
             <div className={`${theme.card} w-full max-w-xl rounded-xl border ${theme.border} shadow-2xl overflow-hidden flex flex-col max-h-[60vh]`} onClick={e => e.stopPropagation()}>
-                <div className="border-b border-white/10 p-4 flex items-center gap-3">
+                <div className={`border-b ${dividerClass} p-4 flex items-center gap-3`}>
                     <Icons.Search className="opacity-50"/>
                     <input 
                         ref={inputRef}
-                        className="bg-transparent outline-none flex-1 text-lg placeholder-white/30"
+                        className={`bg-transparent outline-none flex-1 text-lg placeholder-current opacity-80`}
                         placeholder="O que você precisa?"
                         value={query}
                         onChange={e => setQuery(e.target.value)}
                     />
-                    <div className="text-xs bg-white/10 px-2 py-1 rounded text-white/50">ESC</div>
+                    <div className="text-xs bg-black/10 px-2 py-1 rounded opacity-50">ESC</div>
                 </div>
                 <div className="overflow-y-auto p-2">
                     {filtered.length > 0 ? filtered.map((action:any, i:number) => (
                         <button 
                             key={i} 
                             onClick={() => { action.action(); onClose(); }}
-                            className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-white/10 transition-colors text-left group"
+                            className={`w-full flex items-center gap-3 p-3 rounded-lg ${ghostClass} transition-colors text-left group`}
                         >
-                            <div className={`p-2 rounded bg-white/5 group-hover:bg-white/10 text-${action.color || 'white'}`}>
+                            <div className={`p-2 rounded ${innerClass} group-hover:opacity-80 text-${action.color || 'current'}`}>
                                 {action.icon}
                             </div>
                             <div className="flex-1">
@@ -244,7 +255,7 @@ export const CommandPalette = ({ isOpen, onClose, theme, actions }: any) => {
                         </button>
                     )) : <div className="p-4 text-center opacity-40 text-sm">Nada encontrado.</div>}
                 </div>
-                <div className="p-2 border-t border-white/5 bg-black/20 text-[10px] opacity-40 text-center uppercase font-bold tracking-widest">
+                <div className={`p-2 border-t ${dividerClass} bg-black/5 text-[10px] opacity-40 text-center uppercase font-bold tracking-widest`}>
                     Bora de Van Command Center
                 </div>
             </div>
@@ -258,6 +269,9 @@ export const QuickCalculator = ({ isOpen, onClose, theme }: any) => {
     if (!isOpen) return null;
 
     const btnClass = `flex-1 h-12 rounded-lg font-bold text-lg hover:brightness-110 active:scale-95 transition-all`;
+    const innerBg = theme.inner || 'bg-black/30';
+    const ghostBg = theme.ghost || 'bg-white/10';
+
     const handle = (v: string) => {
         if (v === 'C') setDisplay('');
         else if (v === '=') {
@@ -272,13 +286,13 @@ export const QuickCalculator = ({ isOpen, onClose, theme }: any) => {
                     <span className="text-xs font-bold uppercase opacity-50">Calc</span>
                     <button onClick={onClose}><Icons.X size={14} className="opacity-50 hover:opacity-100"/></button>
                 </div>
-                <div className="bg-black/30 rounded-lg p-3 text-right font-mono text-xl mb-3 overflow-hidden h-12 flex items-center justify-end">{display || '0'}</div>
+                <div className={`${innerBg} rounded-lg p-3 text-right font-mono text-xl mb-3 overflow-hidden h-12 flex items-center justify-end border ${theme.border}`}>{display || '0'}</div>
                 <div className="grid grid-cols-4 gap-2">
                     {['7','8','9','/','4','5','6','*','1','2','3','-','C','0','=','+'].map(k => (
                         <button 
                             key={k} 
                             onClick={()=>handle(k)} 
-                            className={`${btnClass} ${['/','*','-','+','='].includes(k) ? theme.primary : 'bg-white/10'}`}
+                            className={`${btnClass} ${['/','*','-','+','='].includes(k) ? theme.primary : ghostBg}`}
                         >
                             {k}
                         </button>

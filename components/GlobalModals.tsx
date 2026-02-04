@@ -47,20 +47,30 @@ export const GlobalModals = ({
 
     if (showNewsModal && latestNews) {
         return (
-            <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/90 p-4">
-                 <div className={`${theme.card} w-full max-w-lg p-6 rounded-2xl border ${theme.border} shadow-2xl relative animate-bounce-in`}>
-                    <div className="absolute -top-6 -left-6 bg-amber-500 text-white p-3 rounded-full shadow-lg">
+            <div className="fixed inset-0 z-[20000] flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
+                 <div className="relative w-full max-w-lg animate-bounce-in">
+                    {/* Ícone Flutuante (Fora do Container de Scroll) */}
+                    <div className="absolute -top-5 -left-5 z-20 bg-amber-500 text-white p-3 rounded-full shadow-[0_0_20px_rgba(245,158,11,0.4)] ring-4 ring-[#0f172a] flex items-center justify-center">
                         <Icons.Bell size={32} />
                     </div>
-                    <h2 className="text-2xl font-bold mb-1 mt-2 text-amber-400">Novidades!</h2>
-                    <p className="text-xs opacity-60 mb-4 uppercase tracking-widest">{latestNews.date}</p>
                     
-                    <div className="bg-white/5 rounded-xl p-4 border border-white/10 mb-6">
-                        <h3 className="font-bold text-lg mb-2">{latestNews.title}</h3>
-                        <p className="text-sm opacity-90 whitespace-pre-wrap leading-relaxed">{latestNews.content}</p>
+                    {/* Card com Scroll */}
+                    <div className={`${theme.card} w-full p-6 pt-8 rounded-2xl border ${theme.border} shadow-2xl max-h-[85vh] overflow-y-auto`}>
+                        <h2 className="text-2xl font-bold mb-1 mt-1 text-amber-400 pl-4">Novidades!</h2>
+                        <p className="text-xs opacity-60 mb-4 uppercase tracking-widest pl-4">{latestNews.date}</p>
+                        
+                        <div className="bg-white/5 rounded-xl p-4 border border-white/10 mb-6">
+                            <h3 className="font-bold text-lg mb-2">{latestNews.title}</h3>
+                            {latestNews.image && (
+                                <div className="mb-4 rounded-lg overflow-hidden border border-white/10">
+                                    <img src={latestNews.image} alt="Update" className="w-full h-auto object-cover" />
+                                </div>
+                            )}
+                            <p className="text-sm opacity-90 whitespace-pre-wrap leading-relaxed">{latestNews.content}</p>
+                        </div>
+                        
+                        <Button theme={theme} onClick={markNewsAsSeen} className="w-full">Entendi</Button>
                     </div>
-                    
-                    <Button theme={theme} onClick={markNewsAsSeen} className="w-full">Entendi</Button>
                  </div>
             </div>
         );
