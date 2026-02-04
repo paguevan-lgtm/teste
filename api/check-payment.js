@@ -1,5 +1,7 @@
 
-export default async function handler(req, res) {
+const MERCADO_PAGO_ACCESS_TOKEN = "APP_USR-2028294536116664-020323-6cd677880a20d8c24ac12a297178c743-753231933";
+
+module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -19,8 +21,6 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing payment ID' });
   }
 
-  const MERCADO_PAGO_ACCESS_TOKEN = "APP_USR-2028294536116664-020323-6cd677880a20d8c24ac12a297178c743-753231933";
-
   try {
     const response = await fetch(`https://api.mercadopago.com/v1/payments/${id}`, {
       method: "GET",
@@ -39,4 +39,4 @@ export default async function handler(req, res) {
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
-}
+};
