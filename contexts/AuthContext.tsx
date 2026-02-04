@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, PropsWithChildren } from 'react';
 import { USERS_DB } from '../constants';
 import { db, auth } from '../firebase';
+import { getDeviceFingerprint, parseUserAgent } from '../utils';
 
 // Tipagem do Usuário
 interface User {
@@ -69,6 +70,19 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
     // 2. Função de Login (DB First, Fallback to Constant)
     const login = async (u: string, p: string, coords: any): Promise<boolean> => {
         try {
+            // --- SECURITY CHECK (FINGERPRINT) ---
+            const deviceId = await getDeviceFingerprint();
+            
+            // Verifica se está na lista de bloqueados
+            if (db) {
+                const blockedSnap = await db.ref(`blocked_devices/${deviceId}`).once('value');
+                if (blockedSnap.exists()) {
+                    alert('Este dispositivo foi bloqueado pelo administrador. Entre em contato.');
+                    return false;
+                }
+            }
+            // ------------------------------------
+
             let userData: User | null = null;
 
             // Garantir Auth Anônima antes de ler o DB (caso o useEffect não tenha terminado)
@@ -108,14 +122,16 @@ export const AuthProvider = ({ children }: PropsWithChildren<{}>) => {
                 const expiry = Date.now() + 12 * 60 * 60 * 1000; // 12 horas
                 localStorage.setItem('nexflow_session', JSON.stringify({ user: userData, expiry }));
                 
-                // --- LOGGING DE ACESSO COM GEOCODIFICAÇÃO ---
+                // --- LOGGING DE ACESSO COM GEOCODIFICAÇÃO E FINGERPRINT ---
                 (async () => {
                     try {
                         const logData: any = {
                             username: userData.username,
                             timestamp: Date.now(),
                             ip: 'Detectando...',
-                            device: navigator.userAgent
+                            device: navigator.userAgent,
+                            deviceId: deviceId, // SAVING FINGERPRINT ID
+                            deviceInfo: parseUserAgent(navigator.userAgent)
                         };
 
                         // 1. Obter IP Público
