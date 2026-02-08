@@ -5,7 +5,7 @@ import { THEMES, INITIAL_SP_LIST, BAIRROS } from './constants';
 import { Icons, Toast, ConfirmModal, CommandPalette, QuickCalculator } from './components/Shared';
 import { TourGuide } from './components/Tour';
 import { LoginScreen } from './pages/Login';
-import { getTodayDate, getOperationalDate, getLousaDate, generateUniqueId, callGemini, getAvatarUrl, getBairroIdx, formatDisplayDate, dateAddDays, addMinutes } from './utils';
+import { getTodayDate, getOperationalDate, getLousaDate, generateUniqueId, callGemini, getAvatarUrl, getBairroIdx, formatDisplayDate, dateAddDays, addMinutes, translateFirebaseError } from './utils';
 
 // Context Auth
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -161,7 +161,7 @@ const AppContent = () => {
     };
 
     const dbOp = async (type: string, node: string, payload: any) => {
-        if(!db) return notify("Sem conexão DB.", "error");
+        if(!db) return notify("Sem conexão com o banco de dados.", "error");
         try {
             let ref;
             if (node === 'preferences') ref = db.ref(`user_data/${user.username}/preferences`);
@@ -180,7 +180,11 @@ const AppContent = () => {
                 await ref.child(payload).remove();
                 notify("Excluído.", "info");
             }
-        } catch(e: any) { notify("Erro ao salvar: " + e.message, "error"); }
+        } catch(e: any) { 
+            console.error("Firebase DB Error:", e); // Log para depuração
+            const userMessage = translateFirebaseError(e);
+            notify(userMessage, "error");
+        }
     };
 
     const loadOlderTrips = async () => {
@@ -730,11 +734,21 @@ const AppContent = () => {
         setSuggestedTrip((prev:any) => ({ ...prev, passengers: prev.passengers.filter((p:any) => p.id !== id), occupancy: prev.occupancy - (parseInt(prev.passengers.find((p:any)=>p.id===id)?.passengerCount)||1) }));
     };
     const confirmTrip = () => {
-         const newTrip: any = { // Explicitly typed as any to allow dynamic assignment of properties
-             driverId: formData.driverId || data.drivers.find((d:any)=>d.name===suggestedTrip.driver.name)?.id,
+        // PROACTIVE VALIDATION
+        if (!suggestedTrip || !suggestedTrip.driver || !suggestedTrip.driver.id) {
+            return notify("Selecione um motorista para a viagem.", "error");
+        }
+        
+        const finalTime = formData.time || suggestedTrip.time;
+        if (!finalTime) {
+            return notify("O horário da viagem é obrigatório.", "error");
+        }
+
+        const newTrip: any = {
+             driverId: suggestedTrip.driver.id,
              driverName: suggestedTrip.driver.name,
-             time: suggestedTrip.time,
-             date: suggestedTrip.date,
+             time: finalTime,
+             date: formData.date || suggestedTrip.date,
              status: 'Ativo',
              paymentStatus: 'Pendente',
              passengerIds: suggestedTrip.passengers.map((p:any)=>p.id),
@@ -742,13 +756,18 @@ const AppContent = () => {
              pCountSnapshot: suggestedTrip.occupancy,
              isMadrugada: !!formData.isMadrugada
          };
+
          if (editingTripId) newTrip.id = editingTripId;
+
          dbOp(editingTripId ? 'update' : 'create', 'trips', newTrip);
          setModal(null); setSuggestedTrip(null); setEditingTripId(null);
     };
     const simulate = () => {
         const dr = data.drivers.find((d:any)=>d.id === formData.driverId);
-        setSuggestedTrip({ driver: dr || { name: 'Simulado', capacity: 15 }, time: formData.time, date: formData.date || getTodayDate(), passengers: [], occupancy: 0 });
+        if (!dr) {
+            return notify("Por favor, selecione um motorista.", "error");
+        }
+        setSuggestedTrip({ driver: dr, time: formData.time, date: formData.date || getTodayDate(), passengers: [], occupancy: 0 });
     };
 
     if (isLoading) return <div id="loader" className="fixed inset-0 bg-black flex items-center justify-center"><div className="text-amber-500 font-bold">CARREGANDO...</div></div>;
