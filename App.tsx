@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db, auth } from './firebase';
 import { THEMES, INITIAL_SP_LIST, BAIRROS } from './constants';
@@ -428,7 +429,47 @@ const AppContent = () => {
         dbOp('update', 'preferences', { menuOrder: newOrder.map(i => i.id) });
     };
 
-    const del = (node: string, id: string) => { requestConfirm("Excluir item?", "Essa ação não pode ser desfeita.", () => { dbOp('delete', node, id); }); };
+    const del = (col: string, id: string) => {
+        const performDelete = () => {
+            // Optimistic UI Update for immediate feedback
+            setData((prevData: any) => ({
+                ...prevData,
+                [col]: prevData[col].filter((item: any) => item.id !== id),
+            }));
+            
+            // DB Operation in the background
+            dbOp('delete', col, id);
+        };
+    
+        if (col === 'trips') {
+            const trip = data.trips.find((t: any) => t.id === id);
+            if (trip) {
+                const msg = trip.status === 'Finalizada' 
+                    ? 'Os passageiros voltarão para a lista de Agendamentos (Pendentes).' 
+                    : 'Tem certeza que deseja excluir esta viagem?';
+                
+                requestConfirm('Excluir viagem?', msg, () => {
+                    // Handle side-effects before deleting
+                    if (trip.status === 'Finalizada' && trip.passengerIds && Array.isArray(trip.passengerIds)) {
+                        trip.passengerIds.forEach((pid: string) => {
+                            db.ref(`passengers/${pid}`).update({ time: trip.time, date: trip.date });
+                        });
+                    }
+                    if (trip.isMadrugada) {
+                        const sp = spList.find((s: any) => s.name === trip.driverName);
+                        if (sp) {
+                            db.ref(`daily_tables/${trip.date}/madrugada/${sp.vaga}`).update({ time: null, qtd: null });
+                        }
+                    }
+                    performDelete();
+                });
+                return;
+            }
+        }
+    
+        // Default delete for other collections
+        requestConfirm('Excluir item?', 'Tem certeza que deseja remover este item permanentemente?', performDelete);
+    };
     
     const save = (type: string) => {
         if (type === 'passengers' && !formData.name) return notify("Nome obrigatório", "error");
