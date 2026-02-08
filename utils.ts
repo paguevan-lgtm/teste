@@ -399,3 +399,33 @@ export const getHardwareInfo = () => {
         return gpu;
     } catch(e) { return 'Unknown GPU'; }
 }
+
+/**
+ * Traduz erros comuns do Firebase para mensagens amigáveis.
+ * @param error O objeto de erro do Firebase.
+ * @returns Uma string com a mensagem traduzida.
+ */
+export const translateFirebaseError = (error: any): string => {
+    if (!error) return "Ocorreu um erro desconhecido.";
+
+    const message = error.message || '';
+    
+    if (message.includes('permission_denied') || message.includes('PERMISSION_DENIED')) {
+        return "Erro: Você não tem permissão para realizar esta ação. Contate o administrador.";
+    }
+    
+    if (message.includes('value argument contains undefined')) {
+        return "Erro: Um campo obrigatório não foi preenchido. Verifique o formulário e tente novamente.";
+    }
+
+    if (message.includes('network error')) {
+        return "Erro de conexão. Verifique sua internet e tente novamente.";
+    }
+
+    // Fallback para erros não traduzidos, mas limpa a parte técnica
+    if (message.includes(':')) {
+        return `Erro: ${message.split(':').slice(1).join(':').trim()}`;
+    }
+
+    return `Ocorreu um erro inesperado: ${message}`;
+};
