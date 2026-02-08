@@ -1,16 +1,13 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { db, auth } from './firebase';
 import { THEMES, INITIAL_SP_LIST, BAIRROS } from './constants';
 import { Icons, Toast, ConfirmModal, CommandPalette, QuickCalculator } from './components/Shared';
 import { TourGuide } from './components/Tour';
 import { LoginScreen } from './pages/Login';
-import Paywall from './pages/Paywall';
 import { getTodayDate, getOperationalDate, getLousaDate, generateUniqueId, callGemini, getAvatarUrl, getBairroIdx, formatDisplayDate, dateAddDays, addMinutes } from './utils';
 
-// Context Auth & Subscription
+// Context Auth
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { SubscriptionProvider, useSubscription } from './contexts/SubscriptionContext';
 
 // Components
 import { Sidebar } from './components/Sidebar';
@@ -28,10 +25,9 @@ import Achados from './pages/Achados';
 import Configuracoes from './pages/Configuracoes';
 import GerenciarUsuarios from './pages/GerenciarUsuarios';
 
-// Componente Interno que consome os Contextos
+// Componente Interno que consome o Contexto
 const AppContent = () => {
-    const { user, isAuthenticated, isLoading: authLoading, logout } = useAuth();
-    const { isSubscribed, loading: subLoading } = useSubscription();
+    const { user, isAuthenticated, isLoading, logout } = useAuth();
     
     // Estados Globais
     const [isFireConnected, setIsFireConnected] = useState(false);
@@ -306,10 +302,8 @@ const AppContent = () => {
         return () => clearInterval(int);
     }, [currentOpDate, lousaDate, analysisDate]);
 
-    // Data Listeners
     useEffect(() => {
-        if(!db || !user || !isSubscribed) return; // Prevent data loading if locked
-        
+        if(!db || !user) return; 
         const msgRef = db.ref('canned_messages_config/list');
         const msgCb = msgRef.on('value', (snap: any) => setCannedMessages(snap.val() || []));
         const driversRef = db.ref('drivers_table_list');
@@ -375,10 +369,10 @@ const AppContent = () => {
             labelsRef.off('value', labelsCb);
             savedMenuRef.off('value', savedMenuCb);
         }
-    }, [db, user, isFireConnected, currentOpDate, lousaDate, isSubscribed]);
+    }, [db, user, isFireConnected, currentOpDate, lousaDate]);
 
     useEffect(() => {
-        if (!db || !user || !isSubscribed) return;
+        if (!db || !user) return;
         const smallNodes = ['passengers', 'drivers', 'notes', 'lostFound', 'blocked_ips', 'newsletter', 'users'];
         const unsubs = smallNodes.map(node => {
             const ref = db.ref(node);
@@ -410,7 +404,7 @@ const AppContent = () => {
             unsubs.forEach(fn => fn());
             tripsRef.off('value', tripsCb);
         };
-    }, [user, isFireConnected, isSubscribed]);
+    }, [user, isFireConnected]);
 
     // --- MISSING HANDLERS IMPLEMENTATION ---
 
@@ -716,11 +710,8 @@ const AppContent = () => {
         setSuggestedTrip({ driver: dr || { name: 'Simulado', capacity: 15 }, time: formData.time, date: formData.date || getTodayDate(), passengers: [], occupancy: 0 });
     };
 
-    if (authLoading || subLoading) return <div id="loader" className="fixed inset-0 bg-black flex items-center justify-center"><div className="text-amber-500 font-bold">CARREGANDO...</div></div>;
-    
+    if (isLoading) return <div id="loader" className="fixed inset-0 bg-black flex items-center justify-center"><div className="text-amber-500 font-bold">CARREGANDO...</div></div>;
     if (!isAuthenticated) return <LoginScreen />;
-
-    if (!isSubscribed) return <Paywall />;
 
     return (
         <div className={`h-screen w-screen overflow-hidden ${theme.bg} ${theme.text} font-sans flex`} 
@@ -858,9 +849,7 @@ const AppContent = () => {
 export default function App() {
     return (
         <AuthProvider>
-            <SubscriptionProvider>
-                <AppContent />
-            </SubscriptionProvider>
+            <AppContent />
         </AuthProvider>
     );
 }
