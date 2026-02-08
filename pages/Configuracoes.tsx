@@ -4,11 +4,9 @@ import { Icons, Input, Button } from '../components/Shared';
 import { THEMES } from '../constants';
 import { getAvatarUrl, generateUniqueId, getTodayDate, compressImage, parseUserAgent } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
-import { useSubscription } from '../contexts/SubscriptionContext';
 
 export default function Configuracoes({ user, theme, restartTour, setAiModal, geminiKey, setGeminiKey, saveApiKey, ipToBlock, setIpToBlock, blockIp, data, del, ipHistory, ipLabels, saveIpLabel, changeTheme, themeKey, dbOp, notify, requestConfirm, setView }: any) {
     const { logout } = useAuth();
-    const { daysRemaining, expiryDate } = useSubscription();
     
     // States for Newsletter
     const [newsTitle, setNewsTitle] = useState('');
@@ -161,11 +159,8 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${user.role === 'admin' ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-blue-500/20 text-blue-300 border-blue-500/30'}`}>
                                     {user.role}
                                 </span>
-                                {daysRemaining < 30 && (
-                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${daysRemaining <= 5 ? 'bg-red-500/20 text-red-300 border-red-500/30 animate-pulse' : 'bg-green-500/20 text-green-300 border-green-500/30'}`}>
-                                        {daysRemaining > 300 ? 'Vitalício' : `${daysRemaining} dias restantes`}
-                                    </span>
-                                )}
+                                <span className="text-xs opacity-50">•</span>
+                                <span className="text-xs opacity-50">Online agora</span>
                             </div>
                         </div>
                     </div>
@@ -436,7 +431,7 @@ export default function Configuracoes({ user, theme, restartTour, setAiModal, ge
                                         <div key={dev.id} className="bg-red-900/10 border border-red-500/20 p-3 rounded-lg flex justify-between items-center">
                                             <div>
                                                 <div className="text-xs font-bold text-red-200 flex items-center gap-2">
-                                                    <Icons.Fingerprint size={14}/> ID: {dev.id.substring(0,12)}...
+                                                    <Icons.Fingerprint size={14}/> ID: {(dev.id || '').substring(0,12)}...
                                                 </div>
                                                 <div className="text-[10px] text-red-400/60 mt-1">Motivo: {dev.reason || 'Sem motivo'}</div>
                                                 <div className="text-[10px] text-red-400/40">Em: {new Date(dev.blockedAt).toLocaleDateString()}</div>

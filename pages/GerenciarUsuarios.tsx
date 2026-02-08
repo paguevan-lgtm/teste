@@ -131,7 +131,7 @@ export default function GerenciarUsuarios({ data, theme, setView, dbOp, notify, 
                             
                             <div className="flex items-center gap-2">
                                 <div className="hidden md:block mr-4 text-xs opacity-40 font-mono">
-                                    Senha: {u.pass.substring(0,2)}***
+                                    Senha: {(u.pass || '').substring(0,2)}***
                                 </div>
                                 <IconButton theme={theme} onClick={() => handleEdit(u)} icon={Icons.Edit} variant="secondary" />
                                 <IconButton theme={theme} onClick={() => handleDelete(u.id, u.username)} icon={Icons.Trash} variant="danger" />
